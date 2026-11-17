@@ -1,0 +1,161 @@
+{
+  "repo": "https://github.com/usememos/memos",
+  "pass": "focus:open (loose), 2026-11-16, tool dc6211c",
+  "about": "Guesses an open-pass reviewer wrote and tested. A guess that held on several repos is a candidate kind.",
+  "guesses": [
+    {
+      "guess": "Update-mask paths",
+      "perspective": "new: no recorded seam covers field masks",
+      "held": "Held, recorded update-mask-paths and one bug. ",
+      "seams": null,
+      "test": "grep web/src for updateMask, paths: and mask.add; grep server/router/api/v1 for UpdateMask.Paths; compare the path sets RPC by RPC, and compare each update_mask field_behavior with the handler's nil check."
+    },
+    {
+      "guess": "Store cache keys and invalidation",
+      "perspective": "new; store/cache was unopened",
+      "held": "Did not hold: every key comes from a helper inside package store (userCacheKey, getUserSettingCacheKey, Key.String()), every write goes through a store method that sets or deletes the key, and the only Store.GetDriver() caller outside store is GetDatabaseSize. ",
+      "seams": null,
+      "test": "grep Cache.Set, Cache.Get and Cache.Delete in store/*.go, and GetDriver() across the repo."
+    },
+    {
+      "guess": "Store and API setting converters",
+      "perspective": "new: field-level mirror",
+      "held": "Held, no drift, recorded settings-converter-fields. ",
+      "seams": null,
+      "test": "a script parses every message in proto/store/instance_setting.proto, proto/store/user_setting.proto, proto/api/v1/instance_service.proto and proto/api/v1/user_service.proto (regex on 'type name = N' inside a brace-tracked message stack), pairs the setting messages, and requires each shared field's Go name in both the FromStore and ToStore converter bodies. Only api_key is one-way, on purpose."
+    },
+    {
+      "guess": "Theme token sets",
+      "perspective": "new: convention over web/src/themes",
+      "held": "Held, recorded theme-color-tokens. ",
+      "seams": null,
+      "test": "a script extracts each theme file's :root custom properties, compares the color tokens with default.css (27 in each file), and compares the backticked tokens in COLOR_GUIDE.md with that set."
+    },
+    {
+      "guess": "Locale placeholders and keys used in code",
+      "perspective": "deeper look at locale-message-keys, which checked key presence only",
+      "held": "No drift, not recorded. ",
+      "seams": null,
+      "test": "a script flattens the 42 non-English locale files and compares each key's set of {{var}} placeholders with en.json (0 mismatches), and matches t('...') calls and key-shaped string literals in web/src against en.json (0 missing). The dynamic families attachment-library.tabs.*, editor.format.heading-N (capped at 3 in MemoEditor/Editor/formatting.ts:116), memo.visibility.*, setting.notification.requirement-* and live-update.* all exist. Literal keys are already type-checked through the Translations type in web/src/utils/i18n.ts:54-62, which pnpm lint runs with tsc."
+    },
+    {
+      "guess": "Error codes and messages the web branches on",
+      "perspective": "new: contract",
+      "held": "Not a seam: the web branches only on Connect codes (connect.ts:106, lib/query-client.ts:10, hooks/useMemoDetailError.ts:19, pages/MemoDetail.tsx:73), convertGRPCError casts the gRPC code (connect_handler.go:65-80), and no web code matches message text.",
+      "seams": null,
+      "test": null
+    },
+    {
+      "guess": "Browser storage keys and URL parameters inside web",
+      "perspective": "new",
+      "held": "Held for the sign-out list, recorded signout-preserved-storage-keys. ",
+      "seams": null,
+      "test": "grep localStorage, sessionStorage, useLocalStorage, searchParams and '?param=' builders in web/src. The filter parameter goes through shared helpers, and the thumbnail and share_token URLs are already in file-route-urls. The memos.metadata.head and memos.metadata.body comment markers in web/index.html have no consumer anywhere in the repo."
+    },
+    {
+      "guess": "Release version",
+      "perspective": "packaging",
+      "held": "Not a seam: .release-please-manifest.json (0.29.1) and CHANGELOG.md are both written by release-please, internal/version.Version is 'dev' unless ldflags set it (version-ldflags), and the schema version comes from migration file names (store/migrator.go:299-319).",
+      "seams": null,
+      "test": null
+    },
+    {
+      "guess": "Admin-only RPCs",
+      "perspective": "new: convention",
+      "held": "Held, no drift, recorded admin-only-rpcs. ",
+      "seams": null,
+      "test": "a script lists every rpc in proto/api/v1/*.proto, extracts the body of each APIV1Service handler, and flags RoleAdmin, isSuperUser and fetchCurrentUser; every instance-wide handler checks ADMIN (instance_service.go:149, :188, :245; instance_stats.go:55; idp_service.go:24, :84, :147; user_service.go:71, :183, :344, :360, :394)."
+    },
+    {
+      "guess": "CI path filters against what each job reads",
+      "perspective": "new: packaging",
+      "held": "Held with drift, recorded backend-ci-path-filter. ",
+      "seams": null,
+      "test": "read every paths filter in .github/workflows, list the go:embed directives, and run git log --name-only for commits that touched only store/migration, store/seed or proto/gen/openapi.yaml. frontend-tests (web/**) and proto-linter (proto/**) cover their inputs."
+    },
+    {
+      "guess": "Generated outputs versus the proto sources",
+      "perspective": "new; proto/gen was unopened",
+      "held": "No drift found, recorded proto-generated-outputs. ",
+      "seams": null,
+      "test": "a script reads every field, enum value and rpc in proto/api/v1 and proto/store (704 members), looks for 'name=<field>' in the matching .pb.go and for the camelCase name or oneof case in the matching _pb.ts; all are present, and the headers show one generator version per plugin. Byte-for-byte equality needs buf generate with network access and was not checked."
+    },
+    {
+      "guess": "Request metadata keys",
+      "perspective": "new: contract",
+      "held": "Held, no drift, recorded request-metadata-keys. ",
+      "seams": null,
+      "test": "every md.Get key under server/ against the keys MetadataInterceptor sets."
+    },
+    {
+      "guess": "Driver error text for unique violations",
+      "perspective": "new: copied helper",
+      "held": "Held, no drift, recorded unique-violation-detection. ",
+      "seams": null,
+      "test": "grep 'UNIQUE constraint', 'duplicate key' and 'Duplicate entry' across server, store and internal."
+    },
+    {
+      "guess": "Inbox notification types",
+      "perspective": "new: convention",
+      "held": "Held, no drift, recorded inbox-message-types. ",
+      "seams": null,
+      "test": "grep InboxMessage_MEMO_ and UserNotification_Type across server, store and web; the payload-to-memo-ID switch exists in five files."
+    },
+    {
+      "guess": "Numeric limits shared by web and server",
+      "perspective": "deeper look beyond upload-size-limits",
+      "held": "Held with drift, recorded memo-content-length-limit and transcription-config-length-caps. ",
+      "seams": null,
+      "test": "grep 'too long' and 'maximum length' in server and internal, and maxLength and min= in web/src."
+    },
+    {
+      "guess": "Proto request docs versus handlers",
+      "perspective": "new: description",
+      "held": "Held with drift, recorded list-request-docs. ",
+      "seams": null,
+      "test": "read every page_size, order_by and filter comment in proto/api/v1, and grep request.PageSize and request.OrderBy in server/router/api/v1."
+    },
+    {
+      "guess": "Rarely run writers: migrations that write JSON into proto-backed columns. Check: grep store/migration for json_ functions and JSON literals and compare the keys with protojson names. The 0.27 STORAGE value (storageType DATABASE) and the 0.27 inbox rewrite (memoComment.memoId, relatedMemoId) match the store protos; the 0.30 copy of instance TAGS into user TAGS depends on two mirrored messages, recorded tag-metadata-json-shape.",
+      "perspective": null,
+      "held": null,
+      "seams": null,
+      "test": null
+    },
+    {
+      "guess": "Memo deletion versus the user-delete cascade",
+      "perspective": "rarely run cleanup",
+      "held": "Held with drift, recorded memo-delete-dependents and reaction-content-id-format. ",
+      "seams": null,
+      "test": "compare what store.DeleteMemo and APIV1Service.DeleteMemo delete with deleteUserTargetsTx in the three drivers, then trace reaction content_id writers and readers."
+    },
+    {
+      "guess": "AI provider types",
+      "perspective": "new; internal/ai was 6 percent opened",
+      "held": "Held, no drift, recorded ai-provider-types and extended ai-provider-defaults with the save-time endpoint fill. ",
+      "seams": null,
+      "test": "grep OPENAI, GEMINI and ProviderType in proto, internal/ai, server and web."
+    },
+    {
+      "guess": "READMEs and guides nobody opened. Held with drift, recorded web-component-readmes and internal-email-readme, and extended toolchain-versions with the email README's Go line. Check: list every name, file and behavior each README states (MemoEditor, ConfirmDialog, ui, MemoContent/markdown, internal/email) and look each up in its folder; internal/cron/README.md is one line and agrees.",
+      "perspective": null,
+      "held": null,
+      "seams": null,
+      "test": null
+    },
+    {
+      "guess": "Client cache keys. Not a seam: web/src/hooks defines key factories (memoKeys, userKeys, attachmentKeys, instanceKeys, memoShareKeys), and the only literal query key is the geocoding one.",
+      "perspective": null,
+      "held": null,
+      "seams": null,
+      "test": null
+    },
+    {
+      "guess": "Docker build context. Not a seam: .dockerignore excludes nothing that a go:embed directive or scripts/Dockerfile needs.",
+      "perspective": null,
+      "held": null,
+      "seams": null,
+      "test": null
+    }
+  ]
+}

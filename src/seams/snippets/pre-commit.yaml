@@ -1,0 +1,17 @@
+# For repos that use the pre-commit framework (.pre-commit-config.yaml).
+repos:
+  - repo: local
+    hooks:
+      - id: seams-check
+        name: seams check
+        entry: python3 scripts/seams_check.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: seams-staged
+        name: seams touched by this commit
+        entry: python3 scripts/seams_check.py --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true  # it never fails, and pre-commit hides a passing hook's output

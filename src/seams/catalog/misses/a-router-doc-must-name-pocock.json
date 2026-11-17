@@ -1,0 +1,45 @@
+{
+  "miss_version": 1,
+  "id": "a-router-doc-must-name-pocock",
+  "reported": "2026-11-17",
+  "summary": "A router doc must name every shipped skill; a skill wired into the manifest and READMEs was left out of the router.",
+  "must_agree": "skills/engineering/ask-matt/SKILL.md also names resolving-merge-conflicts.",
+  "shape": "doc-index",
+  "kind": "vocabulary",
+  "languages": [
+    "json",
+    "md"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": ".claude-plugin/plugin.json",
+      "file_type": ".json"
+    },
+    {
+      "role": "changed",
+      "path": "README.md",
+      "file_type": ".md"
+    },
+    {
+      "role": "changed",
+      "path": "skills/engineering/README.md",
+      "file_type": ".md"
+    },
+    {
+      "role": "missed",
+      "path": "skills/engineering/ask-matt/SKILL.md",
+      "file_type": ".md"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/mattpocock/skills",
+  "commits": {
+    "cause": "d327545",
+    "fix": "8a475c4"
+  },
+  "handled_by": null,
+  "notes": "prevention task pocock-d327545; from the seamreg prevention benchmark"
+}

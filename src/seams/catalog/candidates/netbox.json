@@ -1,0 +1,161 @@
+{
+  "repo": "https://github.com/netbox-community/netbox",
+  "pass": "focus:open (loose), 2026-11-16, tool dc6211c",
+  "about": "Guesses an open-pass reviewer wrote and tested. A guess that held on several repos is a candidate kind.",
+  "guesses": [
+    {
+      "guess": "Element IDs, classes and data-* attributes that the TypeScript selects are emitted by templates or Python.",
+      "perspective": "new: netbox/project-static was 46% opened, and earlier seams covered only some of its modules.",
+      "held": "yes, no drift",
+      "seams": "Recorded quick-add-handshake. Leftovers with no emitter: #content-title (src/util.ts:209) and .sidenav-toggle (src/sidenav.ts:71); no template has a .sidenav element, so the sidenav module never runs. Not recorded.",
+      "test": "A script extracted getElementById, querySelector(All), closest and getElements string arguments, plus getAttribute('data-...') and dataset.* reads, from src/**/*.ts and searched all .html and .py text under netbox/ for each token."
+    },
+    {
+      "guess": "Color names in choice sets, button color choices and docs become CSS classes that the stylesheet defines.",
+      "perspective": "new: data values that turn into CSS class names.",
+      "held": "yes, with 2 drifts",
+      "seams": "button-color-classes.",
+      "test": "A script listed .text-bg-*, .btn-* and .text-* rules in netbox/project-static/dist/netbox.css and compared them with the third element of every choice tuple in netbox/**/*.py, ButtonColorChoices and the docs color list. A grep followed every renderer of button_class and button.color."
+    },
+    {
+      "guess": "SVG renderer class names match the SVG stylesheets and racks.ts.",
+      "perspective": "new: bundle-output-names covers only the file names.",
+      "held": "yes; two dead stylesheet rules",
+      "seams": "svg-element-classes.",
+      "test": "A script collected class_= values from netbox/dcim/svg/racks.py and cables.py and compared them with class selectors in styles/svg/*.scss and racks.ts; git log -S traced the 'occupied' and 'termination' classes."
+    },
+    {
+      "guess": "Import lines in docs code samples name modules and names that exist.",
+      "perspective": "new: plugin docs' code samples treated as copies of the public API.",
+      "held": "yes, with drift",
+      "seams": "docs-python-import-paths. The utilities.tables.BaseTable path in adding-models.md is already recorded under adding-models-checklist.",
+      "test": "A script resolved every 'from <netbox package> import <names>' line in docs/**/*.md (outside release notes) against netbox/<module>.py or __init__.py, following relative star imports. __all__ was then checked by hand. A second script resolved backticked dotted paths and ':::' references the same way."
+    },
+    {
+      "guess": "manage.py commands and flags quoted in docs, upgrade.sh and contrib exist.",
+      "perspective": "new: docs/administration was 9% opened.",
+      "held": "commands and flags: yes, no drift; shell guide: drift",
+      "seams": "nbshell-namespace-docs.",
+      "test": "grep -oE 'manage.py +[a-z_]+' across docs, scripts, contrib and workflows, compared with netbox/*/management/commands/*.py plus Django and drf-spectacular built-ins. A script listed add_argument names per command. The shell guide was read against nbshell.get_namespace()."
+    },
+    {
+      "guess": "Model reference pages list the fields the models have.",
+      "perspective": "deeper: model-docs-choice-lists checked only the choice lists inside these pages.",
+      "held": "yes, with drift",
+      "seams": "model-doc-field-sections. Most flags were friendly names, combined headings or mixin fields.",
+      "test": "A script mapped '### ' headings under '## Fields' in docs/models/*/*.md to model fields by name or verbose_name, following base classes, and listed headings with no match and model fields with no heading. Flagged items were checked by hand and in git log."
+    },
+    {
+      "guess": "The Node.js and Yarn versions agree across CI, docs and package manifests.",
+      "perspective": "new: the Ruff and Python pins are recorded, Node is not.",
+      "held": "no",
+      "seams": "Only .github/workflows/ci.yml:35 pins Node 20.x; docs/development/web-ui.md:56 says 'the LTS release should suffice'; package.json pins yarn@1.22.22. No second copy can drift.",
+      "test": "grep for node, yarn and engines across .github/workflows, docs/development, package.json files and .pre-commit-config.yaml."
+    },
+    {
+      "guess": "Issue label names agree across the stale and lock workflows, the issue templates and the contributor docs.",
+      "perspective": "new: .github/workflows was 2 of 8 files opened.",
+      "held": "no",
+      "seams": "The workflow labels (status: accepted, backlog, blocked, revisions needed; pending closure) appear in no other repo file. Label definitions live in GitHub settings, outside the repo.",
+      "test": "Read close-stale-issues.yml, close-incomplete-issues.yml and lock-threads.yml, and grepped labels and day counts in .github/ISSUE_TEMPLATE, CONTRIBUTING.md and docs/development."
+    },
+    {
+      "guess": "contrib/openapi.json matches the serializers.",
+      "perspective": "new: the file is over 1 MB and the scan skipped it.",
+      "held": "seam: yes; drift: none found",
+      "seams": "openapi-schema-snapshot. Open question: TokenSerializer.allowed_ips (netbox/users/api/serializers_/tokens.py:25) appears nowhere in contrib/openapi.json and never has (git log -S). Whether spectacular drops it or the file is stale needs a spectacular run, which this pass did not do.",
+      "test": "A script compared Meta.fields of 157 serializers with components.schemas[<Name>].properties. grep showed that scripts/verify-openapi.sh is referenced by no workflow, hook or doc. git log listed API commits since the v4.5.8 regeneration."
+    },
+    {
+      "guess": "docs/features and docs/administration pages state defaults and durations that settings.py also sets.",
+      "perspective": "new: docs/features was 33% opened.",
+      "held": "no",
+      "seams": "No numeric defaults to compare. replicating-netbox.md's core_objectchange table name matches netbox/extras/migrations/0117_move_objectchange.py:46.",
+      "test": "grep -E for '<n> days|seconds|minutes|hours', 'by default' and 'defaults to' in docs/features, docs/getting-started, docs/administration, docs/index.md and docs/introduction.md."
+    },
+    {
+      "guess": "Deprecation notices that name a removal release are past due at v4.5.8.",
+      "perspective": "new: temporal knowledge.",
+      "held": "partly",
+      "seams": "The user-facing copy (docs/configuration/error-reporting.md:21, :53, :70, :106) is already recorded under configuration-parameter-docs. The rest are maintainer TODO comments ('TODO: Remove in NetBox v4.5' at netbox/core/models/object_types.py:54, netbox/netbox/constants.py:47, netbox/netbox/models/features.py:725, netbox/netbox/settings.py:183-191, netbox/netbox/views/generic/mixins.py:12, :36, :59). Not recorded.",
+      "test": "git grep for remove, deprecat or drop near v4.0-v4.5 outside release notes, migrations and tests."
+    },
+    {
+      "guess": "FIELD_CHOICES keys in code match the configurable field list in the docs (found while testing guess 3).",
+      "perspective": "deeper: configuration-parameter-docs did not list the ChoiceSet keys as copies.",
+      "held": "yes, with drift",
+      "seams": "Extends configuration-parameter-docs.",
+      "test": "A script listed every \"key = '...'\" in netbox/*/choices.py, matched each to the model field that uses the ChoiceSet, and diffed the result with the bullet list in docs/configuration/data-validation.md."
+    },
+    {
+      "guess": "REST API paths quoted in the docs are registered routes.",
+      "perspective": "new.",
+      "held": "yes, with drift",
+      "seams": "docs-rest-api-endpoint-paths.",
+      "test": "A script collected router.register() names and path() segments from netbox/*/api/urls.py and url_path or method names of @action, then checked every /api/<app>/<endpoint>/ and detail route in docs/**/*.md."
+    },
+    {
+      "guess": "Menu paths quoted in the docs match menu.py.",
+      "perspective": "new.",
+      "held": "yes, with one drift",
+      "seams": "docs-ui-menu-paths.",
+      "test": "A script printed the Menu, MenuGroup and item tree from netbox/netbox/navigation/menu.py; each 'X > Y' phrase in docs was checked against it."
+    },
+    {
+      "guess": "GraphQL examples in the docs use the current filter syntax.",
+      "perspective": "new.",
+      "held": "yes, with drift",
+      "seams": "graphql-filter-syntax-docs.",
+      "test": "Read docs/integrations/graphql-api.md against the filter classes and netbox/netbox/tests/test_graphql.py; git log -S and -L dated the syntax change."
+    },
+    {
+      "guess": "The contribution policy agrees across the PR template, CONTRIBUTING.md, docs/development/index.md and CLAUDE.md.",
+      "perspective": "new.",
+      "held": "yes, no drift; not recorded",
+      "seams": "They agree. The CONTRIBUTING.md template links are already recorded under issue-template-links.",
+      "test": "Read the four files for branch, issue-approval and assignment rules."
+    },
+    {
+      "guess": "Cache keys written in one file are read under the same name and shape in another.",
+      "perspective": "new: values written to one key by several code paths.",
+      "held": "yes, no drift",
+      "seams": "'config' and 'config_version' (netbox/core/models/config.py:74-75, netbox/netbox/config/__init__.py:71-72) agree. 'latest_release' agrees and extends housekeeping-tasks with its reader.",
+      "test": "grep of cache.set, get and delete across netbox/."
+    },
+    {
+      "guess": "Every object action a list or detail view declares has a registered model view.",
+      "perspective": "new.",
+      "held": "yes, no visible drift",
+      "seams": "TunnelTerminationListView (netbox/vpn/views.py:200-205) keeps BulkRename without a bulk_rename view. netbox/utilities/templates/buttons/bulk_rename.html:1 hides the button when the URL is missing, so it has no effect.",
+      "test": "A script read 'actions = (...)' (or the ObjectListView and ObjectView defaults) per view and checked register_model_view names for the same model."
+    },
+    {
+      "guess": "prerequisite_models strings name existing models.",
+      "perspective": "new.",
+      "held": "yes, no drift",
+      "seams": "All resolve.",
+      "test": "A script checked the 27 'app.Model' strings in prerequisite_models tuples against model class names."
+    },
+    {
+      "guess": "mkdocs.yml nav entries and docs files agree.",
+      "perspective": "deeper: adding-models-checklist checked only model pages.",
+      "held": "yes, no drift",
+      "seams": "All 258 entries exist; only docs/index.md, the home page, is outside nav.",
+      "test": "A script compared the .md entries under nav: in mkdocs.yml with docs/**/*.md."
+    },
+    {
+      "guess": "The 'Add Components' menus offer the component types each parent supports.",
+      "perspective": "new.",
+      "held": "yes, no drift",
+      "seams": "Module and module type menus offer exactly the 8 modular types; device and device type menus offer all 10.",
+      "test": "grep of '<app>:<model>_add' URLs in the device, module, device type, module type and VM templates, against subclasses of ModularComponentModel and ModularComponentTemplateModel."
+    },
+    {
+      "guess": "The Jinja2 environment parameters that accept dotted import paths match the template docs.",
+      "perspective": "new.",
+      "held": "yes, no drift; not recorded",
+      "seams": "Both name undefined and finalize.",
+      "test": "Read JINJA_ENV_PARAMS_WITH_PATH_IMPORT (netbox/extras/constants.py:36-39) against docs/models/extras/exporttemplate.md:27 and configtemplate.md:27."
+    }
+  ]
+}

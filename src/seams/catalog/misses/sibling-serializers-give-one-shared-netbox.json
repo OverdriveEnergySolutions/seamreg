@@ -1,0 +1,44 @@
+{
+  "miss_version": 1,
+  "id": "sibling-serializers-give-one-shared-netbox",
+  "reported": "2026-11-17",
+  "summary": "Sibling serializers give one shared field different writability: one marks it read-only, the others accept it.",
+  "must_agree": "ExportTemplateSerializer.data_file (netbox/extras/api/serializers_/exporttemplates.py) is no longer read_only=True, so export templates accept a data_file the same way config contexts, profiles and config templates do.",
+  "shape": "siblings",
+  "kind": "convention",
+  "languages": [
+    "py"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "netbox/core/api/serializers_/data.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/extras/api/serializers_/configcontexts.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/extras/tests/test_api.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "missed",
+      "path": "netbox/extras/api/serializers_/exporttemplates.py",
+      "file_type": ".py"
+    }
+  ],
+  "registry": "glob-only",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/netbox-community/netbox",
+  "commits": {
+    "cause": "1c46215cd",
+    "fix": "3034da187"
+  },
+  "handled_by": "focus:siblings",
+  "notes": "prevention task netbox-1c46215cd; from the seamreg prevention benchmark"
+}

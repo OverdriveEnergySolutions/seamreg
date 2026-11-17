@@ -1,0 +1,53 @@
+# The second file of the fork setup (see github-actions-forks.yml). Save it as
+# .github/workflows/seams-comment.yml. GitHub runs it from the default branch only,
+# so it starts working once it is merged there.
+#
+# It posts the report that the "seams" workflow saved, as one comment on the pull
+# request, and edits that comment on each later push. The report was made by the pull
+# request's code, so this job treats it as data: it checks out nothing, runs nothing
+# from it, and posts only to the pull request whose head is the commit that made it.
+name: seams comment
+on:
+  workflow_run:
+    workflows: [seams]
+    types: [completed]
+permissions:
+  actions: read          # to download the report
+  pull-requests: write   # to post it
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true  # no report: the run stopped before it, or was not a pull request
+        with:
+          name: seams-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/seams
+      - name: seams comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/seams"
+          if [ ! -f "$d/seams.md" ]; then echo "No report to post."; exit 0; fi
+          PR=$(tr -d '[:space:]' < "$d/pr.txt")
+          case "$PR" in ''|*[!0-9]*) echo "::error::pr.txt does not hold a pull request number."; exit 1;; esac
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha) || head=""
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "Pull request $PR is not at $HEAD_SHA (a newer push, or a report for another pull request). Not posting."
+            exit 0
+          fi
+          # Edit the comment posted before; post a new one only when there is something to say.
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq \
+            '.[] | select(.user.type == "Bot" and (.body | startswith("<!-- seams-pr-comment -->"))) | .id') || ids=""
+          id=${ids%%$'\n'*}
+          body=$(jq -Rs '{body: .}' "$d/seams.md")
+          if [ -n "$id" ]; then
+            echo "$body" | gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" --input - > /dev/null
+          elif ! grep -q 'seams-pr-comment: none' "$d/seams.md"; then
+            echo "$body" | gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --input - > /dev/null
+          fi || echo "::warning::seams could not post the comment."

@@ -1,0 +1,50 @@
+{
+  "miss_version": 1,
+  "id": "a-field-a-base-model-netbox",
+  "reported": "2026-11-17",
+  "summary": "A field a base model gives every subclass reaches some subclasses' search indexes and not others.",
+  "must_agree": "PlatformIndex in netbox/dcim/search.py indexes the comments field Platform gains from NestedGroupModel, as ('comments', 5000).",
+  "shape": "siblings",
+  "kind": "convention",
+  "languages": [
+    "md",
+    "py"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "docs/models/dcim/platform.md",
+      "file_type": ".md"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/dcim/api/serializers_/nested.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/dcim/api/serializers_/platforms.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/dcim/filtersets.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "missed",
+      "path": "netbox/dcim/search.py",
+      "file_type": ".py"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/netbox-community/netbox",
+  "commits": {
+    "cause": "148fac108",
+    "fix": "7d0a86ef5"
+  },
+  "handled_by": null,
+  "notes": "prevention task netbox-148fac108; from the seamreg prevention benchmark"
+}

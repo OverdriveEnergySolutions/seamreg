@@ -1,0 +1,51 @@
+{
+  "miss_version": 1,
+  "id": "the-image-s-final-stage-umami",
+  "reported": "2026-11-17",
+  "summary": "The image's final stage copies the ORM folder but not the ORM config file the migrate command reads at run time.",
+  "must_agree": "The Dockerfile runner stage copies prisma.config.ts next to prisma/ (as COPY --from=builder /app/prisma.config.ts ./prisma.config.ts), so prisma migrate deploy in the image still finds the datasource url.",
+  "shape": "packaging",
+  "kind": "config",
+  "languages": [
+    "md",
+    "prisma",
+    "sql"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": ".gitignore",
+      "file_type": ".gitignore"
+    },
+    {
+      "role": "changed",
+      "path": "CLAUDE.md",
+      "file_type": ".md"
+    },
+    {
+      "role": "changed",
+      "path": "prisma/migrations/16_boards/migration.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "changed",
+      "path": "prisma/schema.prisma",
+      "file_type": ".prisma"
+    },
+    {
+      "role": "missed",
+      "path": "Dockerfile",
+      "file_type": "Dockerfile"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/umami-software/umami",
+  "commits": {
+    "cause": "e08907d99",
+    "fix": "f41c0221c"
+  },
+  "handled_by": "focus:packaging",
+  "notes": "prevention task umami-e08907d99; from the seamreg prevention benchmark"
+}

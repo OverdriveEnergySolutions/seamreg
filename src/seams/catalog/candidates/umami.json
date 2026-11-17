@@ -1,0 +1,168 @@
+{
+  "repo": "https://github.com/umami-software/umami",
+  "pass": "focus:open (loose), 2026-11-16, tool dc6211c",
+  "about": "Guesses an open-pass reviewer wrote and tested. A guess that held on several repos is a candidate kind.",
+  "guesses": [
+    {
+      "guess": "API error codes the server sends match the message.<code> ids the client looks up at run time.",
+      "perspective": "New. message-ids checked only the static ids in messages.ts; these ids are built from response codes.",
+      "held": "yes, recorded as api-error-message-ids",
+      "seams": null,
+      "test": "grep for code: literals and badRequest/unauthorized/forbidden/notFound/serverError calls under src/app/api and src/lib; a Python check of each code against the message section of all 52 files in public/intl/messages."
+    },
+    {
+      "guess": "Each translation's ICU argument names match en-US and the values each call passes.",
+      "perspective": "New. public/intl had 1 of 158 files opened.",
+      "held": "yes, recorded as message-argument-names",
+      "seams": null,
+      "test": "Python ICU argument parser over all 52 message files (an apostrophe quotes only before { } # | < > or another apostrophe; plural branch bodies are skipped), compared per key with en-US; plus a scan of every t(labels.X, {...}) and t.rich(messages.X, {...}) call in src for the keys passed. All 28 calls with values pass what en-US needs."
+    },
+    {
+      "guess": "Every path and method the client calls has a route file that exports the method.",
+      "perspective": "New. Earlier passes checked only the report paths.",
+      "held": "yes, recorded as client-api-route-paths",
+      "seams": null,
+      "test": "Python: list src/app/api/**/route.ts with exported methods, convert [x] segments to wildcards, and match every get/post/put/del/useUpdateQuery/useDeleteQuery path literal in src. 103 calls; the 4 calls with nested templates (FunnelEditForm, GoalEditForm, CohortEditForm, SegmentEditForm) were checked by hand."
+    },
+    {
+      "guess": "Every internal link target (href, router.push, renderUrl, nav path) has a page.tsx.",
+      "perspective": "New.",
+      "held": "partly. No live drift, so the team rewrite is recorded as team-url-prefix with no drift. The /reports tab in src/app/(main)/websites/[websiteId]/WebsiteTabs.tsx:40 has no page, but nothing imports that file.",
+      "seams": null,
+      "test": "Python: page.tsx routes with route groups, @slots and (.) intercepts stripped, the /teams/:teamId/:path* rewrite and the redirects in next.config.ts applied, matched against string targets in src."
+    },
+    {
+      "guess": "Each delete and reset path removes every table keyed to the entity, as the confirmation texts say.",
+      "perspective": "New: cascade lists against prisma/schema.prisma relations.",
+      "held": "yes, recorded as entity-delete-cascade",
+      "seams": null,
+      "test": "grep for deleteMany, delete( and updateMany in src/queries/prisma and src; the schema relation lists; grep for ALTER TABLE and DELETE FROM in src for ClickHouse deletes (none found)."
+    },
+    {
+      "guess": "Web vitals thresholds, units and column precision are repeated and differ.",
+      "perspective": "Deeper look at web-vitals-metrics, which checked metric names only.",
+      "held": "no. WEB_VITALS_THRESHOLDS (constants.ts:105) is the only threshold source; cls is Decimal(10,4) and the others Decimal(10,1) in schema.prisma, migration 18, schema.sql and ClickHouse migration 09; the tracker sends milliseconds.",
+      "seams": null,
+      "test": "grep for the threshold numbers, lcp|inp|cls|fcp|ttfb across prisma, db and src."
+    },
+    {
+      "guess": "CSS module class names used in TSX exist in the imported .module.css.",
+      "perspective": "New. The scan never reads .css files.",
+      "held": "no. All 4 importers use only existing classes.",
+      "seams": null,
+      "test": "Python: for each import X from './Y.module.css', compare X.name and X['name'] uses with the class selectors in Y."
+    },
+    {
+      "guess": "Links to files in public/ carry BASE_PATH.",
+      "perspective": "Deeper look at public-url-base-path, which checked shown URLs only.",
+      "held": "yes, recorded as an extension of public-url-base-path",
+      "seams": null,
+      "test": "grep for /intl, /images, /datamaps, /favicon, /site.webmanifest, /script.js, /recorder.js and /telemetry.js in src, and the icon paths in public/site.webmanifest and public/browserconfig.xml."
+    },
+    {
+      "guess": "The date range values the pickers write are values the parsers read, on the server as in the browser.",
+      "perspective": "New vocabulary.",
+      "held": "yes; the vocabulary agrees, and cohort ranges resolve without the viewer's timezone; recorded as date-range-values",
+      "seams": null,
+      "test": "Read DateFilter, UnitFilter, WebsiteDateFilter, useDateRange, parseDateValue, parseDateRange, getAllowedUnits, request.ts and CohortEditForm; checked each UnitFilter unit against getAllowedUnits for its range by hand."
+    },
+    {
+      "guess": "The session and visit id derivation is copied into the pixel, link, batch or record routes.",
+      "perspective": "New copied-helper.",
+      "held": "no. Only the send route derives ids (send/route.ts:144-173); the pixel, link and batch routes call its POST, and record reads the cache token.",
+      "seams": null,
+      "test": "grep sessionSalt, visitSalt, uuid(sourceId and startOfHour in src."
+    },
+    {
+      "guess": "The recorder's payload matches the record route schema.",
+      "perspective": "Deeper look at session-cache-token, which covered the token only.",
+      "held": "no. {type: 'record', payload: {website, events, timestamp}} matches record/route.ts:18-25, and batches of 100 (recorder/index.js:28) fit max(200).",
+      "seams": null,
+      "test": "Read src/recorder/index.js and src/app/api/record/route.ts."
+    },
+    {
+      "guess": "Replay chunks are encoded by the writer the way the reader decodes them on each backend.",
+      "perspective": "New.",
+      "held": "no. Postgres stores gzip of JSON and the reader gunzips; ClickHouse stores JSON text and the reader parses it; ClickHouse dates come back as ISO (date_time_output_format iso, clickhouse.ts:281).",
+      "seams": null,
+      "test": "Read saveRecording.ts, getReplayChunks.ts and the session_replay table in db/clickhouse/schema.sql."
+    },
+    {
+      "guess": "The two pagedRawQuery copies return the same page shape.",
+      "perspective": "New copied-helper.",
+      "held": "no. They differ only in a search field that DataGrid reads as a fallback. No route accepts orderBy (sortingParams is in no route), so the interpolated order by takes no request input.",
+      "seams": null,
+      "test": "Read prisma.ts:285-332 and clickhouse.ts:238-263; grep sortingParams under src/app/api."
+    },
+    {
+      "guess": "Browser storage keys are written and read under different names.",
+      "perspective": "New.",
+      "held": "no. The keys come from constants.ts:2-10; share:navCollapsed and the tab keys are used in one file each; umami.disabled has no writer in the app.",
+      "seams": null,
+      "test": "grep for 'umami.' string literals, localStorage and getItem/setItem/removeItem in src."
+    },
+    {
+      "guess": "Run-time label lookups (labels[x]) use keys that exist.",
+      "perspective": "New.",
+      "held": "no. Units, ratings, role keys, vitals, device types and the 25 expanded-view types all exist in labels.",
+      "seams": null,
+      "test": "Python: list the label keys in src/components/messages.ts and the type props passed to MetricsTable and the expanded views."
+    },
+    {
+      "guess": "Cypress selectors, texts and paths match the components and pages.",
+      "perspective": "New. Earlier passes opened five of the six specs for config and fixture seams (default-admin-account, role-names, cypress-container-mounts) and recorded no selector or path check.",
+      "held": "yes, recorded as e2e-test-selectors",
+      "seams": null,
+      "test": "Python: every getDataTest('x') value in cypress/ against data-test=\"x\" attributes in src; cy.visit paths against page routes."
+    },
+    {
+      "guess": "Every writer of event_data and session_data uses one string_value format per data type.",
+      "perspective": "New, a value with several writers.",
+      "held": "yes, recorded as event-data-value-format",
+      "seams": null,
+      "test": "grep data_type, dataType and DATA_TYPE in src, scripts and db; read src/lib/data.ts and scripts/seed/generators/events.ts."
+    },
+    {
+      "guess": "The 'path' and 'event' action types mean the same event filter in goals, attribution, funnels and cohorts.",
+      "perspective": "Deeper look at event-type-codes, whose drift named journeys and realtime only.",
+      "held": "yes, recorded as an extension of event-type-codes",
+      "seams": null,
+      "test": "grep for 'path' and event_type in src/queries/sql/reports and the cohort builders in src/lib/prisma.ts and src/lib/clickhouse.ts."
+    },
+    {
+      "guess": "share_type codes agree between the constants, the migration and the routes.",
+      "perspective": "New vocabulary.",
+      "held": "yes, with drift in the generic route; recorded as share-type-codes",
+      "seams": null,
+      "test": "grep shareType, share_type and ENTITY_TYPE in src and prisma/migrations."
+    },
+    {
+      "guess": "The /api/config fields match what useConfig's readers read.",
+      "perspective": "New contract.",
+      "held": "no. The route and the Config type list the same fields; currentVersion is returned but never read.",
+      "seams": null,
+      "test": "Read src/app/api/config/route.ts and grep config?. and useConfig() in src."
+    },
+    {
+      "guess": "The podman README steps match the files they name.",
+      "perspective": "New. The scan skips .service files.",
+      "held": "no. env.sample, podman-compose.yml, umami.service paths and the install script agree with podman/README.md.",
+      "seams": null,
+      "test": "Read podman/README.md, podman/umami.service and podman/install-systemd-user-service."
+    },
+    {
+      "guess": "The stale-issues exempt labels match the labels the issue templates apply.",
+      "perspective": "New.",
+      "held": "not recorded. The templates apply no labels, so bug and enhancement exemptions depend on triage; this has no code effect.",
+      "seams": null,
+      "test": "grep labels in .github/ISSUE_TEMPLATE/*.yml and .github/workflows/stale-issues.yml."
+    },
+    {
+      "guess": "Context for ties: does CI type-check the app?",
+      "perspective": "Affects every 'TypeScript would catch it' claim.",
+      "held": "no. next.config.ts:201-203 sets typescript.ignoreBuildErrors: true, and ci.yml runs only jest and next build, so type errors outside jest-imported files fail no check.",
+      "seams": null,
+      "test": "Read next.config.ts and .github/workflows/ci.yml."
+    }
+  ]
+}

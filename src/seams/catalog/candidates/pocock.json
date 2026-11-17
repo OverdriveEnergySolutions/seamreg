@@ -1,0 +1,182 @@
+{
+  "repo": "https://github.com/mattpocock/skills",
+  "pass": "focus:open (loose), 2026-11-16, tool dc6211c",
+  "about": "Guesses an open-pass reviewer wrote and tested. A guess that held on several repos is a candidate kind.",
+  "guesses": [
+    {
+      "guess": "Renamed or removed skills (to-prd, to-issues, diagnose, review, decision-mapping, qa, write-a-skill) and moved files (LANGUAGE.md, refactoring.md, docs/invocation.md, tickets.md) still appear outside CHANGELOG.md.",
+      "perspective": "New: uses the CHANGELOG's rename history as the list of names to hunt, across every file.",
+      "held": "Yes, but every hit is already in a recorded seam's drift: ADR 0001 'diagnose' and CONTEXT.md/setup 'qa' in setup-config-consumers, and docs/engineering/research.md 'to-prd' in docs-page-template. No slash invocation names a dead skill. The only unknown /names are the built-ins /compact and /plugin.",
+      "seams": null,
+      "test": "git grep -n -E 'to-prd|to-issues|to-plan\\b|decision-mapping|write-a-skill|caveman|zoom-out|\\bdiagnose\\b|\\bqa\\b|LANGUAGE\\.md|refactoring\\.md|docs/invocation\\.md|tickets\\.md|PRD\\.md' -- . ':!CHANGELOG.md'; plus a Python scan of every .md for (?<![\\w./:-])/([a-z][a-z0-9-]*) against the skills/*/*/SKILL.md folder names."
+    },
+    {
+      "guess": "The document /to-spec writes is still called a PRD in some files after the rename.",
+      "perspective": "New: the recorded term seam covers Issue vs ticket only.",
+      "held": "Yes: spec-artifact-term.",
+      "seams": null,
+      "test": "git grep -n -w -E 'PRDs?' -- . ':!CHANGELOG.md'"
+    },
+    {
+      "guess": "A promoted skill invokes a skill the plugin does not ship.",
+      "perspective": "New: checks the dependency graph between skills against plugin.json, not only membership.",
+      "held": "No drift. Recorded as shipped-skill-dependency-closure because nothing checks it automatically. The only non-promoted name a promoted skill mentions is qa in setup-matt-pocock-skills/SKILL.md:40, an explainer that is already recorded.",
+      "seams": null,
+      "test": "Python: for each skills/<bucket>/<name>/*.md, collect /name, `name` and 'name skill' mentions of other skill folders, and report edges whose target is missing from .claude-plugin/plugin.json skills."
+    },
+    {
+      "guess": "Links inside a skill folder point at removed files, cross into another skill's folder (against .agents/invocation.md:16), or leave reference files unlinked.",
+      "perspective": "New: no earlier pass checked in-skill references as a family.",
+      "held": "No. Every link resolves, and the misses are example paths inside templates (CONTEXT-FORMAT.md:43-45, wayfinder/SKILL.md:44, setup-ts-deep-modules/SKILL.md:93). No link crosses folders. The one unlinked file, teach/GLOSSARY-FORMAT.md, is already in teach-workspace-files.",
+      "seams": null,
+      "test": "Python: parse [..](target) and backticked *.md|*.sh|*.cjs names in every skills/*/*/ file, normpath them against the file's folder, check git ls-files membership and the folder prefix, and list files in a skill folder that nothing references."
+    },
+    {
+      "guess": "The skills that write spec and ticket bodies leave out fields that the next session's skills read.",
+      "perspective": "New: a payload built by one skill and read by another across sessions.",
+      "held": "Yes, twice: pre-agreed-test-seams-handoff and prototype-evidence-handoff.",
+      "seams": null,
+      "test": "Read the <spec-template>, <local-ticket-template> and <issue-template> blocks; git grep -n -i 'seam' over to-spec, to-tickets, implement, tdd, their docs pages, ask-matt and README.md; git grep -n -i -E 'context pointer|throwaway branch|came from a prototype'; git log -S 'prototype' on to-spec and to-tickets (386d4ff) and the dates of 371b9c9."
+    },
+    {
+      "guess": "/implement hands /code-review work that /code-review's diff can see.",
+      "perspective": "New: compares the caller's order with the callee's definition of its input. Found while testing the guess above.",
+      "held": "No, the diff cannot see it: recorded as code-review-diff-range.",
+      "seams": null,
+      "test": "git grep -n -i -E 'before commit|then commit|commit your work|work-in-progress|\\.\\.\\.HEAD|fixed point' -- . ':!CHANGELOG.md'; read code-review/SKILL.md:6-23 and implement/SKILL.md:9-15."
+    },
+    {
+      "guess": "Where /research leaves its findings differs between the research skill and wayfinder, which starts it as a subagent.",
+      "perspective": "New: the called skill's output against what its caller expects.",
+      "held": "Yes: research-findings-location.",
+      "seams": null,
+      "test": "git grep -n -i -E 'context pointer|throwaway branch|primary source|research/<|background agent|subagent'"
+    },
+    {
+      "guess": "Skills that start sub-agents name Claude Code's tool in some files and use neutral words in others, while the repo installs every skill into Codex too.",
+      "perspective": "New: harness coupling in skill bodies. Earlier passes checked only the per-harness invocation flags.",
+      "held": "Yes: subagent-dispatch-wording. What Codex does with the Claude Code tool names cannot be checked from the repo.",
+      "seams": null,
+      "test": "git grep -n -E 'Agent tool|`Agent`|general-purpose|subagent_type|AskUserQuestion|TodoWrite|run_in_background|claude --bg|/compact|subagent|sub-agent|background agent' -- skills/ ':!skills/deprecated/'"
+    },
+    {
+      "guess": "The .out-of-scope records restate a skill scope that the skill has since changed.",
+      "perspective": "New: the content of a folder no earlier reviewer opened. The recorded seam checks only its file format.",
+      "held": "Partly: setup-skill-verify-mode.md contradicts setup's SKILL.md:116 and docs page :23. question-limits.md and mainstream-issue-trackers-only.md agree. Recorded as out-of-scope-rejections-match-skills.",
+      "seams": null,
+      "test": "Read the three records; git grep -n -i -E 'at most [0-9a-z]+ question|question (cap|limit)' -- skills docs; compare setup-matt-pocock-skills/SKILL.md:44-47,116 and docs/engineering/setup-matt-pocock-skills.md:23."
+    },
+    {
+      "guess": "Claims in the six changesets that pending-release-notes' drift does not cover no longer match the files: ask-matt-wayfinder-guidance, codex-skill-metadata, friendlier-setup-and-local-tickets, grilling-general-use, ship-as-claude-plugin, wayfinder-research-subagents.",
+      "perspective": "Deeper look at pending-release-notes: the coverage map shows 1 of 10 .changeset files opened.",
+      "held": "Every claim matches except two, which became their own seams: 'works in both harnesses' (subagent-dispatch-wording) and the research/<name> branch (research-findings-location). Checked: 41 agents/openai.yaml files for 41 SKILL.md files; AGENTS.md is a symlink to CLAUDE.md; setup asks the triage-label question only when triage is installed and asks no PR question; spec.md and one file per ticket; the grilling wording 'this', 'act on it' and 'exploring the environment'; ask-matt:44-46 marks wayfinder the heaviest flow and merges at /to-spec.",
+      "seams": null,
+      "test": "Per-claim git grep and reads; ls -la AGENTS.md; count of skills/*/*/agents/openai.yaml."
+    },
+    {
+      "guess": "The docs pages' Prerequisites sections are a second copy of which skills need setup.",
+      "perspective": "Deeper look at setup-config-consumers: these are copies it does not list.",
+      "held": "Yes: recorded as an extension under setup-config-consumers.",
+      "seams": null,
+      "test": "Python: for docs/*/*.md take the ## Prerequisites block and look for setup-matt-pocock-skills; for skills/*/*/SKILL.md look for 'run `/setup-matt-pocock-skills`'."
+    },
+    {
+      "guess": "writing-great-skills states the invocation mechanics differently from .agents/invocation.md.",
+      "perspective": "Deeper look at skill-invocation-mode: GLOSSARY.md is not among its copies.",
+      "held": "Yes: recorded as an extension under skill-invocation-mode.",
+      "seams": null,
+      "test": "grep -n -E '^### |invoked|disable-model-invocation|openai|policy' skills/productivity/writing-great-skills/GLOSSARY.md; Python count of user-invoked skills with a description (24 of 24)."
+    },
+    {
+      "guess": "This repo's own CONTEXT.md and ADRs follow the formats and paths its domain skills use when run on it.",
+      "perspective": "New: treats the repo as a user of its own skills.",
+      "held": "Partly: CONTEXT.md follows CONTEXT-FORMAT.md, but the ADRs are not where the skills look. Recorded as repo-adr-location.",
+      "seams": null,
+      "test": "ls docs; git log --follow on .agents/adr/0001-*.md (renamed from docs/adr/ in 6e178c6); read ADR-FORMAT.md, CONTEXT-FORMAT.md and domain-modeling/SKILL.md:40."
+    },
+    {
+      "guess": "Skills that write into the agent-instructions file choose between CLAUDE.md and AGENTS.md by the same rule.",
+      "perspective": "New: two writers of one file.",
+      "held": "Yes, they differ: agent-instructions-file-choice. They disagree only when neither file exists.",
+      "seams": null,
+      "test": "git grep -n -E 'AGENTS\\.md|CLAUDE\\.md' -- skills/ ':!skills/deprecated/'"
+    },
+    {
+      "guess": "The plugin's listing text is the same in plugin.json, marketplace.json and package.json.",
+      "perspective": "New: the recorded identity seam covers names and slugs only.",
+      "held": "No, it differs: plugin-listing-metadata.",
+      "seams": null,
+      "test": "Python: load the three manifests and compare description, keywords, author/owner, license and repository."
+    },
+    {
+      "guess": "package-lock.json matches package.json, and the $schema pin in .changeset/config.json matches the locked @changesets/config.",
+      "perspective": "New: JSON files the scan did not read.",
+      "held": "No drift. devDependencies match, and the schema pin and the lock are both 3.1.4. Not recorded: npm generates the lock, and npm ci in release.yml fails on a mismatched lock, which is a tie. The lock's 0.0.0 version is already an intentional difference under plugin-version-sync.",
+      "seams": null,
+      "test": "Python: compare package.json devDependencies with package-lock.json packages[''] and the node_modules/@changesets/* versions."
+    },
+    {
+      "guess": "Counts written in prose ('five roles', 'two axes', '~12 smells', 'four rules') disagree with the list they count in another file.",
+      "perspective": "New: a mechanical sweep for counts.",
+      "held": "No new drift. The cross-file mismatches (four rules, two on-ramps) are already recorded. The five state roles, 12 smells, two axes and two vocabulary references agree.",
+      "seams": null,
+      "test": "git grep -n -i -o -E '\\b(two|three|four|five|six|seven|twelve|dozen|~?[0-9]+)\\s+(\\w+\\s+)?(roles?|axes|rules|types|categories|modes|on-ramps|sections|phases|steps|smells|terms|files|branches|buckets|skills|questions|references)\\b' -- . ':!CHANGELOG.md'"
+    },
+    {
+      "guess": "diagnosing-bugs describes its HITL script template differently from the template itself.",
+      "perspective": "Deeper look: an earlier reviewer opened the template but recorded no seam.",
+      "held": "No: the path scripts/hitl-loop.template.sh, the step/capture helpers and the KEY=VALUE output agree.",
+      "seams": null,
+      "test": "Read diagnosing-bugs/SKILL.md:29,58 and scripts/hitl-loop.template.sh."
+    },
+    {
+      "guess": "git-guardrails' install steps disagree with the hook script on the project or the global branch: copy path, settings command path, test payload or exit code.",
+      "perspective": "Deeper look at git-guardrails-blocked-commands, which covers the pattern list only.",
+      "held": "Paths, payload shape (.tool_input.command) and exit 2 agree on both branches. The script needs jq, which SKILL.md never names. Recorded as a bug, marked sensitive.",
+      "seams": null,
+      "test": "Read SKILL.md:24-95 and block-dangerous-git.sh; git grep -n -i jq -- skills/misc/"
+    },
+    {
+      "guess": "Docs pages repeat trigger phrases that no longer match the model-invoked skill's description.",
+      "perspective": "Deeper look at docs-page-skill-descriptions.",
+      "held": "No: all nine model-invoked pages match their descriptions.",
+      "seams": null,
+      "test": "awk the '## When to reach for it' block of each model-invoked docs page and print it beside grep '^description:' from its SKILL.md."
+    },
+    {
+      "guess": "Codex display_name values lag behind skill renames.",
+      "perspective": "New: agents/openai.yaml was mostly unopened.",
+      "held": "No: all 41 display names match the current skill names.",
+      "seams": null,
+      "test": "A shell loop printing each SKILL.md frontmatter, H1 and agents/openai.yaml."
+    },
+    {
+      "guess": "The in-progress writing skills share a raw-material file format (fragments to beats or shape) and a copied rule.",
+      "perspective": "New: none of these three files had been opened.",
+      "held": "There is no payload contract, because writing-shape accepts any format. The grounding rule is copied and agrees: recorded as writing-grounding-rule.",
+      "seams": null,
+      "test": "Read the three SKILL.md files; Python difflib over the two ## Grounding sections with beat/block masked."
+    },
+    {
+      "guess": "Where /handoff saves its document differs between the skill and the files that describe it.",
+      "perspective": "New: the writer and readers of one file.",
+      "held": "No: every copy says the OS temp directory (handoff/SKILL.md:8, docs/productivity/handoff.md:17, ask-matt/SKILL.md:63).",
+      "seams": null,
+      "test": "Read handoff/SKILL.md, docs/productivity/handoff.md and ask-matt/SKILL.md:18-21,63."
+    },
+    {
+      "guess": "Skills read the config paths and ## Agent skills headings that setup writes, by name, in places the recorded seams miss.",
+      "perspective": "Deeper look at issue-tracker-doc-pointer.",
+      "held": "No new copies: only code-review names docs/agents/issue-tracker.md (already recorded), and no skill reads ### Domain docs or ### Triage labels by name.",
+      "seams": null,
+      "test": "git grep -n -E 'docs/agents/|### (Issue tracker|Triage labels|Domain docs)|Agent skills' -- . ':!CHANGELOG.md'"
+    },
+    {
+      "guess": "Release tagging needs package.json 'private', .changeset/config.json privatePackages.tag and release.yml's 'npx changeset tag' to agree.",
+      "perspective": "New: the release config chain.",
+      "held": "They agree today. Not recorded: this is one chain of settings, not one value kept in two places.",
+      "seams": null,
+      "test": "Read package.json, .changeset/config.json and .github/workflows/release.yml."
+    }
+  ]
+}

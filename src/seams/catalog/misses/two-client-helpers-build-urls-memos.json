@@ -1,0 +1,40 @@
+{
+  "miss_version": 1,
+  "id": "two-client-helpers-build-urls-memos",
+  "reported": "2026-11-17",
+  "summary": "Two client helpers build URLs for the same file; one keeps the access token from the full-file URL and the other drops it.",
+  "must_agree": "Thumbnail URLs keep the share token like the full-file URL does: getAttachmentThumbnailUrl in web/src/utils/attachment.ts builds on attachment.externalLink (adding thumbnail=true to its query) when it is set, so a shared memo's image tiles carry share_token.",
+  "shape": "twins",
+  "kind": "copied-helper",
+  "languages": [
+    "ts",
+    "tsx"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "web/src/components/MemoMetadata/Attachment/AttachmentCard.tsx",
+      "file_type": ".tsx"
+    },
+    {
+      "role": "changed",
+      "path": "web/src/components/MemoMetadata/Attachment/AttachmentListView.tsx",
+      "file_type": ".tsx"
+    },
+    {
+      "role": "missed",
+      "path": "web/src/utils/attachment.ts",
+      "file_type": ".ts"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/usememos/memos",
+  "commits": {
+    "cause": "a0d83e1a9",
+    "fix": "3f567fda4"
+  },
+  "handled_by": null,
+  "notes": "prevention task memos-a0d83e1a9; from the seamreg prevention benchmark"
+}

@@ -1,0 +1,44 @@
+{
+  "miss_version": 1,
+  "id": "every-call-to-one-enum-netbox",
+  "reported": "2026-11-17",
+  "summary": "Every call to one enum helper passes a keyword argument; one call passes it positionally, changing the generated names a doc example uses.",
+  "must_agree": "CircuitStatusEnum in netbox/circuits/graphql/enums.py is built with as_enum(prefix='status') like every other status enum, so its values stay STATUS_ACTIVE and the circuit_list(filters:{status: STATUS_ACTIVE}) example in docs/integrations/graphql-api.md still works; no as_enum call passes 'status' positionally (or, if the agent changed the member names, the docs example changes with them).",
+  "shape": "call-convention",
+  "kind": "convention",
+  "languages": [
+    "py"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "netbox/dcim/graphql/enums.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/extras/graphql/enums.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "changed",
+      "path": "netbox/ipam/graphql/enums.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "missed",
+      "path": "netbox/circuits/graphql/enums.py",
+      "file_type": ".py"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/netbox-community/netbox",
+  "commits": {
+    "cause": "4455c2c7d",
+    "fix": "d2238fc36"
+  },
+  "handled_by": null,
+  "notes": "prevention task netbox-4455c2c7d; from the seamreg prevention benchmark"
+}

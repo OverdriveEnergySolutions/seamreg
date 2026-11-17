@@ -1,0 +1,61 @@
+{
+  "miss_version": 1,
+  "id": "every-list-query-excludes-one-umami",
+  "reported": "2026-11-17",
+  "summary": "Every list query excludes one event type on both database backends; three queries missed it.",
+  "must_agree": "getWebsiteEvents, getRealtimeActivity and getSessionActivity exclude event_type 5 on both the relational and the ClickHouse query (event_type != 5, NOT IN (..., 5), or a positive IN list of the types they show). Secondary, not scored: every other website_event reader for pageviews, events or activity does too.",
+  "shape": "query-filter-rule",
+  "kind": "convention",
+  "languages": [
+    "sql",
+    "ts",
+    "tsx"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "db/clickhouse/migrations/09_add_performance.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "changed",
+      "path": "db/clickhouse/schema.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "changed",
+      "path": "src/app/(main)/websites/[websiteId]/(reports)/performance/Performance.tsx",
+      "file_type": ".tsx"
+    },
+    {
+      "role": "changed",
+      "path": "src/app/api/reports/performance/route.ts",
+      "file_type": ".ts"
+    },
+    {
+      "role": "missed",
+      "path": "src/queries/sql/events/getWebsiteEvents.ts",
+      "file_type": ".ts"
+    },
+    {
+      "role": "missed",
+      "path": "src/queries/sql/getRealtimeActivity.ts",
+      "file_type": ".ts"
+    },
+    {
+      "role": "missed",
+      "path": "src/queries/sql/sessions/getSessionActivity.ts",
+      "file_type": ".ts"
+    }
+  ],
+  "registry": "glob-only",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/umami-software/umami",
+  "commits": {
+    "cause": "f6a6d2cc3",
+    "fix": "17e7a4a63"
+  },
+  "handled_by": null,
+  "notes": "prevention task umami-f6a6d2cc3-type5; from the seamreg prevention benchmark"
+}

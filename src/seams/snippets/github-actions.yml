@@ -1,0 +1,60 @@
+# Save as .github/workflows/seams.yml, or copy the job into a workflow that already
+# runs on pull_request. `seams init` put the checker at scripts/seams_check.py. It
+# needs Python 3.9 or later and nothing else. Keep it outside any "docs-only changes"
+# skip: notes live in .md files. If a doc in the repo lists or counts the CI jobs,
+# update it too.
+#
+# On a pull request it posts one comment that names each seam the change touches and
+# the copies it did not change. Each push edits that comment; it never adds a second.
+# A pull request from a fork gets a read-only token, so there the report goes to the
+# job summary only. To comment on forks too, use github-actions-forks.yml instead.
+name: seams
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+  pull-requests: write  # the comment; remove it (and the comment step) to keep the log only
+jobs:
+  seams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the pull request step needs the base branch history
+      - name: seams check
+        run: python3 scripts/seams_check.py
+      - name: seams this pull request touches
+        id: touched
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # through env, not inline in run:
+        # Warn only. Add --fail-untied once most seams have a full tie: until then it
+        # fails most pull requests that touch a seam. The last step applies the result.
+        run: |
+          set +e
+          python3 scripts/seams_check.py --diff "origin/${BASE_REF}" --markdown > "$RUNNER_TEMP/seams.md"
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/seams.md"
+      - name: seams comment
+        if: steps.touched.outputs.code == '0' || steps.touched.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        shell: bash
+        run: |
+          if [ "$SAME_REPO" != true ]; then echo "A fork: the report is in the job summary."; exit 0; fi
+          # Edit the comment this job posted before; post a new one only when there is something to say.
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq \
+            '.[] | select(.user.type == "Bot" and (.body | startswith("<!-- seams-pr-comment -->"))) | .id') || ids=""
+          id=${ids%%$'\n'*}
+          body=$(jq -Rs '{body: .}' "$RUNNER_TEMP/seams.md")
+          if [ -n "$id" ]; then
+            echo "$body" | gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" --input - > /dev/null
+          elif ! grep -q 'seams-pr-comment: none' "$RUNNER_TEMP/seams.md"; then
+            echo "$body" | gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --input - > /dev/null
+          fi || echo "::warning::seams could not post the comment. The report is in the job summary."
+      - name: seams result
+        if: steps.touched.outputs.code != '' && steps.touched.outputs.code != '0'
+        run: exit 1

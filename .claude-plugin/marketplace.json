@@ -1,0 +1,13 @@
+{
+  "name": "seamreg",
+  "owner": {
+    "name": "Overdrive Energy Solutions"
+  },
+  "plugins": [
+    {
+      "name": "seams",
+      "description": "Find the knowledge a repo keeps in more than one place, record it in seams.json, and fail CI when the copies drift.",
+      "source": "./"
+    }
+  ]
+}

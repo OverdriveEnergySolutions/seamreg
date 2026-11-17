@@ -1,0 +1,39 @@
+{
+  "miss_version": 1,
+  "id": "a-change-removed-the-only-pocock",
+  "reported": "2026-11-17",
+  "summary": "A change removed the only pointer from one skill to another, while the changelog and the router still say the first uses the second.",
+  "must_agree": "skills/engineering/tdd/SKILL.md still names /codebase-design (editing CHANGELOG.md alone does not pass). Secondary, not scored: no README still calls tdd a red-green-refactor loop.",
+  "shape": "doc-claims",
+  "kind": "contract",
+  "languages": [
+    "md"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": ".changeset/tdd-reference-only-seams.md",
+      "file_type": ".md"
+    },
+    {
+      "role": "changed",
+      "path": "skills/engineering/tdd/refactoring.md",
+      "file_type": ".md"
+    },
+    {
+      "role": "missed",
+      "path": "skills/engineering/tdd/SKILL.md",
+      "file_type": ".md"
+    }
+  ],
+  "registry": "glob-only",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/mattpocock/skills",
+  "commits": {
+    "cause": "80e9dcc",
+    "fix": "8a475c4"
+  },
+  "handled_by": null,
+  "notes": "prevention task pocock-80e9dcc; from the seamreg prevention benchmark"
+}

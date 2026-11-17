@@ -1,0 +1,34 @@
+{
+  "miss_version": 1,
+  "id": "a-mixin-field-added-to-netbox",
+  "reported": "2026-11-17",
+  "summary": "A mixin field added to one sibling model's API serializer is missing from another sibling's serializer.",
+  "must_agree": "ExportTemplateSerializer.Meta.fields (netbox/extras/api/serializers_/exporttemplates.py) also lists 'auto_sync_enabled'. Secondary, not scored: the config context and config context profile serializers lack it too, and the later fix left them.",
+  "shape": "siblings",
+  "kind": "convention",
+  "languages": [
+    "py"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "netbox/extras/api/serializers_/configtemplates.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "missed",
+      "path": "netbox/extras/api/serializers_/exporttemplates.py",
+      "file_type": ".py"
+    }
+  ],
+  "registry": "glob-only",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/netbox-community/netbox",
+  "commits": {
+    "cause": "222b26e06",
+    "fix": "3034da187"
+  },
+  "handled_by": "focus:siblings",
+  "notes": "prevention task netbox-222b26e06; from the seamreg prevention benchmark"
+}

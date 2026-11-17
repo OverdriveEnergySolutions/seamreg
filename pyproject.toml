@@ -1,0 +1,34 @@
+[project]
+name = "seamreg"  # "seams" on PyPI is an unrelated project. The command is still `seams`.
+version = "0.1.0"
+description = "Find the knowledge a repo keeps in more than one place, and fail CI when the copies drift."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+seams = "seams.cli:main"
+seamreg = "seams.cli:main"  # so `uvx seamreg` works
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/seams"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.uv]
+# Rebuild when the source changes, not only pyproject.toml. Without this, `uvx --from
+# <clone>` keeps serving an old build after the code changes.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }, { file = "src/**/*.md" },
+              { file = "src/**/*.json" }, { file = "src/**/*.yml" }, { file = "src/**/*.yaml" },
+              { file = "src/**/*.sh" }]

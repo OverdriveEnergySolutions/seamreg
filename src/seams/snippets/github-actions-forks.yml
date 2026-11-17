@@ -1,0 +1,50 @@
+# The seams workflow for a repo that takes pull requests from forks. It replaces
+# github-actions.yml, and it needs a second file: github-actions-forks-comment.yml.
+#
+# Why two files: a pull request from a fork runs with a read-only token, so it cannot
+# post a comment. This workflow runs the check with that read-only token and saves the
+# report. The second one starts when this one finishes, runs only trusted code from the
+# default branch, and posts the report. It never checks out the pull request's code.
+#
+# Save as .github/workflows/seams.yml. The second file names this workflow "seams":
+# if you rename it, rename it there too.
+name: seams
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  seams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the pull request step needs the base branch history
+      - name: seams check
+        run: python3 scripts/seams_check.py
+      - name: seams this pull request touches
+        id: touched
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # through env, not inline in run:
+          PR: ${{ github.event.pull_request.number }}
+        # Warn only. Add --fail-untied once most seams have a full tie.
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/seams"
+          python3 scripts/seams_check.py --diff "origin/${BASE_REF}" --markdown > "$RUNNER_TEMP/seams/seams.md"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "$PR" > "$RUNNER_TEMP/seams/pr.txt"
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/seams/seams.md"
+          [ "$code" = 0 ] || [ "$code" = 1 ] || rm -f "$RUNNER_TEMP/seams/seams.md"
+      - uses: actions/upload-artifact@v4
+        if: steps.touched.outputs.code == '0' || steps.touched.outputs.code == '1'
+        with:
+          name: seams-comment
+          path: ${{ runner.temp }}/seams/
+          retention-days: 1
+      - name: seams result
+        if: steps.touched.outputs.code != '' && steps.touched.outputs.code != '0'
+        run: exit 1

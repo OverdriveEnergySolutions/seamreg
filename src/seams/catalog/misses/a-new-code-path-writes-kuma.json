@@ -1,0 +1,34 @@
+{
+  "miss_version": 1,
+  "id": "a-new-code-path-writes-kuma",
+  "reported": "2026-11-17",
+  "summary": "A new code path writes a stored datetime in ISO form while every other writer of that column uses the SQL datetime form.",
+  "must_agree": "The value written to maintenance.last_start_date uses the SQL datetime form every other datetime write uses (R.isoDateTime / R.isoDateTimeMillis, or dayjs .format(SQL_DATETIME_FORMAT)), not toISOString(), which MariaDB rejects.",
+  "shape": "writers",
+  "kind": "contract",
+  "languages": [
+    "js"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "db/knex_migrations/2025-06-13-0000-maintenance-add-last-start.js",
+      "file_type": ".js"
+    },
+    {
+      "role": "missed",
+      "path": "server/model/maintenance.js",
+      "file_type": ".js"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/louislam/uptime-kuma",
+  "commits": {
+    "cause": "7c88a38d",
+    "fix": "2d9e6c39"
+  },
+  "handled_by": null,
+  "notes": "prevention task kuma-7c88a38d; from the seamreg prevention benchmark"
+}

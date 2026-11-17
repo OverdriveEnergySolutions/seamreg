@@ -1,0 +1,17 @@
+# Local scratch tools and notes. They can hold private paths and security
+# findings. Never commit them.
+kit/
+HANDOFF.md
+
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+dist/
+build/
+
+# Notes from test runs. They quote private repos.
+FEEDBACK*.md
+
+# Made by `uv run`. The package has no dependencies to lock.
+uv.lock

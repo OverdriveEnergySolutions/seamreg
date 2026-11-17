@@ -1,0 +1,51 @@
+{
+  "miss_version": 1,
+  "id": "every-query-that-splices-a-umami",
+  "reported": "2026-11-17",
+  "summary": "Every query that splices a shared filter fragment must also join the table the fragment names; one query's date column was left unqualified.",
+  "must_agree": "In getPerformance.ts relationalQuery, every SQL string that splices filterQuery also splices joinSessionQuery, and every column session also has is qualified there: the chart's getDateSQL reads website_event.created_at, not created_at.",
+  "shape": "query-join-rule",
+  "kind": "convention",
+  "languages": [
+    "sql",
+    "ts",
+    "tsx"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "db/clickhouse/migrations/09_add_performance.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "changed",
+      "path": "db/clickhouse/schema.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "changed",
+      "path": "src/app/(main)/websites/[websiteId]/(reports)/performance/Performance.tsx",
+      "file_type": ".tsx"
+    },
+    {
+      "role": "changed",
+      "path": "src/app/api/reports/performance/route.ts",
+      "file_type": ".ts"
+    },
+    {
+      "role": "missed",
+      "path": "src/queries/sql/reports/getPerformance.ts",
+      "file_type": ".ts"
+    }
+  ],
+  "registry": "glob-only",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/umami-software/umami",
+  "commits": {
+    "cause": "f6a6d2cc3",
+    "fix": "e58131cb"
+  },
+  "handled_by": null,
+  "notes": "prevention task umami-f6a6d2cc3-perf; from the seamreg prevention benchmark"
+}

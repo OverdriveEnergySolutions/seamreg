@@ -1,0 +1,140 @@
+{
+  "repo": "https://github.com/louislam/uptime-kuma",
+  "pass": "focus:open (loose), 2026-11-16, tool dc6211c",
+  "about": "Guesses an open-pass reviewer wrote and tested. A guess that held on several repos is a candidate kind.",
+  "guesses": [
+    {
+      "guess": "Translation keys used in components exist in en.json, and placeholders agree between en.json, the components and every translation.",
+      "perspective": "new: src/lang was the least-opened folder (3% of lines).",
+      "held": "yes, with drift",
+      "seams": "frontend-translation-keys, translation-placeholder-names",
+      "test": "Python scripts: (1) static keys from $t(), t() and keypath= in src/**/*.{vue,js,ts} against en.json; (2) the {name} token set per key in src/lang/*.json against en.json; (3) named template slots, or the top-level child count, of each <i18n-t> against en.json; (4) array and object arguments of $t(key, ...) against en.json. Results: 50 of 1,082 keys missing; 111 placeholder mismatches in 46 files; 4 real slot mismatches after manual review (Apprise, CallMeBot, SMSEagle and Ntfy flags were parser false positives)."
+    },
+    {
+      "guess": "Every HTTP path the frontend calls has an Express route.",
+      "perspective": "new: earlier passes checked socket events only.",
+      "held": "no: every axios or baseURL path in src (Entry.vue, StatusPage.vue, SetupDatabase.vue, BadgeGeneratorDialog.vue, EditMonitor.vue, Details.vue) matches a route in server/routers/*.js, server/server.js or server/setup-database.js. This led to the badge parameter check.",
+      "seams": null,
+      "test": "grep for router.get, router.all and app.get or app.post in server/, against grep for axios and baseURL in src/."
+    },
+    {
+      "guess": "Browser storage keys are written and read under the same names and units.",
+      "perspective": "new.",
+      "held": "yes, agreeing. locale (src/mixins/lang.js:35 to src/i18n.js:71) and timezone (src/components/settings/General.vue:261 to src/mixins/datetime.js:10) also agree but are single-value pairs, not recorded.",
+      "seams": "toast-timeout-storage",
+      "test": "Python script listing every localStorage and sessionStorage key with its read and write sites, plus grep for storage()."
+    },
+    {
+      "guess": "Every option value in the monitor form selects is a value the server handles.",
+      "perspective": "deeper look at the vocabulary family: earlier seams cover type, smtpSecurity, operators and the proxy and docker dialogs, not these selects.",
+      "held": "yes, agreeing",
+      "seams": "monitor-form-select-values",
+      "test": "Python script listing each <select> v-model and its option values in src/pages/EditMonitor.vue, plus the option arrays at :1711-1738; grep for each field's comparisons in server/."
+    },
+    {
+      "guess": "Monitor deletion relies on foreign-key cascades that one backend lacks, or references that delete code does not clear.",
+      "perspective": "new: the base schema seam covers columns and types, not delete paths.",
+      "held": "no. SQLite enforces foreign keys (server/database.js:355). Child tables of monitor cascade (db/knex_init_db.js and the stat migrations). Proxy.delete, DockerHost.delete and RemoteBrowser.delete clear monitor references first (server/proxy.js:81, server/docker.js:60, server/remote-browser.js:65).",
+      "seams": null,
+      "test": "Python script listing references() and onDelete() per createTable in db/knex_init_db.js; grep for DELETE FROM and static async delete in server/."
+    },
+    {
+      "guess": "Values written to width-limited VARCHAR columns can exceed the width on MariaDB, which tests never run.",
+      "perspective": "new: the brief says to check the backend branch the tests skip.",
+      "held": "yes, with drift",
+      "seams": "varchar-column-widths",
+      "test": "Python script listing every table.string and table.enum width in db/knex_init_db.js and db/knex_migrations/*.js; each writer read by hand; grep for maxlength in src/."
+    },
+    {
+      "guess": "Columns added in the 17 unopened knex migrations disagree with the code that reads them.",
+      "perspective": "deeper look at monitor-editable-fields and base-schema-sqlite-vs-mariadb: the earlier pass opened 13 of 30 migrations.",
+      "held": "yes for the stat tables. ip_family VARCHAR(4) and the snmp_version enum agree with the form. The monitor columns from every migration all appear in Monitor.toJSON, the editMonitor copy list and EditMonitor.vue, except the recorded manual_status.",
+      "seams": "stat-average-ping-column-type",
+      "test": "Python script listing tables and columns per migration (up part only), then checking each monitor column for camelCase or snake_case presence in server/model/monitor.js:83-213, the editMonitor block of server/server.js and src/pages/EditMonitor.vue; every unopened migration read."
+    },
+    {
+      "guess": "Every 'npm run X' in CI, Dockerfiles, docs and scripts names an existing script.",
+      "perspective": "new.",
+      "held": "no: all resolve.",
+      "seams": null,
+      "test": "Python script resolving every 'npm run X' in git ls-files output against the package.json of its own folder or the root."
+    },
+    {
+      "guess": "Language codes in rtlLangs, localization.scss or locale loaders disagree with languageList.",
+      "perspective": "new.",
+      "held": "no. rtlLangs (src/i18n.js:63) and html[lang='fa'] (src/assets/localization.scss:1) name codes that are in languageList, and no dayjs or cronstrue locale is loaded by code.",
+      "seams": null,
+      "test": "grep for :lang, [lang, dayjs/locale and cronstrue/locales in src/."
+    },
+    {
+      "guess": "Badge query parameters offered by the generator differ from those the routes read.",
+      "perspective": "deeper look at badge-duration-parameter, which checked only the duration path parameter.",
+      "held": "yes, with drift",
+      "seams": "badge-query-parameters",
+      "test": "Python script reading each badge route's const { ... } = request.query block in server/routers/api-router.js, against the parameters map in src/components/BadgeGeneratorDialog.vue:174-232 and its inputs."
+    },
+    {
+      "guess": "Notification providers follow the family rules: a name, async send, a success string, rethrow on failure, and the proxy helper.",
+      "perspective": "new convention check over 83 providers, of which earlier passes opened half.",
+      "held": "the rethrow rule holds; the only catch blocks without a throw are deliberate inner fallbacks (discord.js:27, nostr.js:60 and :73, slack.js:65). The proxy rule is broken by 5 providers.",
+      "seams": "notification-provider-proxy-config",
+      "test": "Python scripts: per provider, count axios calls against getAxiosConfigWithProxy calls, and list each catch block whose body has no throw or throwGeneralAxiosError."
+    },
+    {
+      "guess": "Settings keys the server reads have writers under the same names.",
+      "perspective": "deeper look at general-settings-defaults, which named some keys.",
+      "held": "no new drift. All 13 keys the settings components bind are read on the server. Keys read but never written (title, description, icon, statusPageTheme, statusPagePublished, statusPageTags at server/database.js:546-566) are legacy keys that the status page migration reads.",
+      "seams": null,
+      "test": "Python script collecting setting() and Settings.get() keys in server/ and extra/ against setSetting() and Settings.set() keys and settings.X bindings in src/."
+    },
+    {
+      "guess": "Monitor type classes follow one shape: extend MonitorType, a name equal to the registry key, a check() method.",
+      "perspective": "new convention check.",
+      "held": "only a harmless difference: manual.js names itself 'Manual' while its registry key is 'manual' (server/uptime-kuma-server.js:122), but dispatch (server/model/monitor.js:849-851) and sendMonitorTypeList (server/client.js:220-239) use the key only. This check led to the next guess.",
+      "seams": null,
+      "test": "Python script per server/monitor-types/*.js printing the class, base, name, check(), supportsConditions and conditionVariables."
+    },
+    {
+      "guess": "Monitor checks report faults the way beat() expects, so Retries applies.",
+      "perspective": "new: found while testing the monitor type family.",
+      "held": "yes, with drift",
+      "seams": "monitor-check-failure-signal",
+      "test": "grep for 'status = DOWN' and throw counts per server/monitor-types/*.js and in the beat() inline branches; read CONTRIBUTING.md:183-189 and server/model/monitor.js:860-911; git show 0eebe86f."
+    },
+    {
+      "guess": "Fields the frontend reads from socket acknowledgements are fields the server callback sends.",
+      "perspective": "deeper look at socket-event-names, which checked names and argument order only.",
+      "held": "no: the only flags (TagsManager.vue:429, EditMaintenance.vue:457) come from nested emits.",
+      "seams": null,
+      "test": "Python script pairing each emit(\"name\", ..., (res) => {...}) with the res.X fields it reads, against the top-level keys of every callback({...}) in that server handler."
+    },
+    {
+      "guess": "The status page custom URL added in the unopened 2025-05-09 migration has one writer and reader that agree.",
+      "perspective": "new: an unopened migration.",
+      "held": "yes, with drift",
+      "seams": "status-page-monitor-link-url",
+      "test": "grep for custom_url and customUrl in server/ and src/; read saveStatusPage, Group.getMonitorList, Monitor.toPublicJSON, StatusPage.vue and MonitorSettingDialog.vue."
+    },
+    {
+      "guess": "The PR test tool and the push client build each repeat a tag, a variable or a platform list in several files.",
+      "perspective": "new: extra/kuma-pr and extra/uptime-kuma-push are in this packet's areas.",
+      "held": "yes, agreeing",
+      "seams": "pr-test-image-contract, push-client-image-platforms",
+      "test": "Read extra/kuma-pr/*, extra/checkout-pr.mjs, extra/uptime-kuma-push/*, package.json:43 and :62, and docker/dockerfile:62-90."
+    },
+    {
+      "guess": "Uptime and ping numbers are rounded the same way wherever they are shown.",
+      "perspective": "new: the brief names formatting and rounding.",
+      "held": "uptime differs (recorded). Ping display differs only cosmetically and is not recorded: CountUp.vue:40-50 shows '<1' and two decimals, while the ping and average-response badges truncate with parseInt (server/routers/api-router.js:322, :390).",
+      "seams": "uptime-percent-format",
+      "test": "grep for '* 100', toFixed and toPrecision in src/ and server/."
+    },
+    {
+      "guess": "Icon paths in public/manifest.json, index.html and the layouts exist in public/.",
+      "perspective": "new.",
+      "held": "no: all exist.",
+      "seams": null,
+      "test": "Python script printing the manifest icon paths; grep for href, src and data=\"/icon in index.html and src/; ls public/."
+    }
+  ]
+}

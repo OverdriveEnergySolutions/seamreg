@@ -1,0 +1,62 @@
+{
+  "miss_version": 1,
+  "id": "a-width-limit-seam-existed-umami",
+  "reported": "2026-11-17",
+  "summary": "A width limit seam existed, but its copies' paths moved, so the registry no longer pointed at the files the change touched.",
+  "must_agree": "Each of the 11 new columns either has no length limit, or every value written to it is capped at its length: saveEvent.ts relationalQuery (or the send route) truncates utmSource, utmMedium, utmCampaign, utmContent, utmTerm, gclid, fbclid, msclkid, ttclid, lifatid and twclid to at most n for VARCHAR(n).",
+  "shape": "stale-paths",
+  "kind": "config",
+  "languages": [
+    "prisma",
+    "sql",
+    "toml",
+    "ts"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "db/mysql/migrations/08_add_utm_clid/migration.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "changed",
+      "path": "db/mysql/migrations/migration_lock.toml",
+      "file_type": ".toml"
+    },
+    {
+      "role": "changed",
+      "path": "db/postgresql/migrations/08_add_utm_clid/migration.sql",
+      "file_type": ".sql"
+    },
+    {
+      "role": "missed",
+      "path": "db/mysql/schema.prisma",
+      "file_type": ".prisma"
+    },
+    {
+      "role": "missed",
+      "path": "db/postgresql/schema.prisma",
+      "file_type": ".prisma"
+    },
+    {
+      "role": "missed",
+      "path": "src/app/api/send/route.ts",
+      "file_type": ".ts"
+    },
+    {
+      "role": "missed",
+      "path": "src/queries/sql/events/saveEvent.ts",
+      "file_type": ".ts"
+    }
+  ],
+  "registry": "recorded-stale",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/umami-software/umami",
+  "commits": {
+    "cause": "e7fc482a3",
+    "fix": "3230f6596"
+  },
+  "handled_by": null,
+  "notes": "prevention task umami-e7fc482a3; from the seamreg prevention benchmark"
+}

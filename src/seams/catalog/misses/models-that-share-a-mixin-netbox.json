@@ -1,0 +1,34 @@
+{
+  "miss_version": 1,
+  "id": "models-that-share-a-mixin-netbox",
+  "reported": "2026-11-17",
+  "summary": "Models that share a mixin each have a CSV import form; one form gained the mixin's fields and a sibling's did not.",
+  "must_agree": "ExportTemplateImportForm (the other synced-data template in netbox/extras/forms/bulk_import.py) also gets data_source and data_file CSV lookup fields and auto_sync_enabled, all three in its Meta.fields, with the same content-or-data-file check.",
+  "shape": "siblings",
+  "kind": "convention",
+  "languages": [
+    "py"
+  ],
+  "copies": [
+    {
+      "role": "changed",
+      "path": "netbox/extras/forms/bulk_import.py",
+      "file_type": ".py"
+    },
+    {
+      "role": "missed",
+      "path": "netbox/extras/forms/bulk_import.py",
+      "file_type": ".py"
+    }
+  ],
+  "registry": "none",
+  "found_by": "benchmark",
+  "public": true,
+  "repo": "https://github.com/netbox-community/netbox",
+  "commits": {
+    "cause": "d7877b762",
+    "fix": "3034da187"
+  },
+  "handled_by": "focus:siblings",
+  "notes": "prevention task netbox-d7877b762; from the seamreg prevention benchmark"
+}

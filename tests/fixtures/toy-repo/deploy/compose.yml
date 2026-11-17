@@ -1,0 +1,5 @@
+services:
+  worker:
+    environment:
+      ORDER_QUEUE_URL: ${ORDER_QUEUE_URL}
+      LOG_LEVEL: ${LOG_LEVEL}
