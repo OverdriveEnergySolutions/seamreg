@@ -10,6 +10,24 @@ Code maps and call graphs do not show these. Two copies of a list do not import 
 
 Repos built by AI coding agents grow seams fast. Each session copies what it needs, and a later session changes only one copy.
 
+## Install
+
+In Claude Code, add the plugin. It brings the two skills and the reviewer agents:
+
+```
+/plugin marketplace add OverdriveEnergySolutions/seamreg
+/plugin install seams@seamreg
+```
+
+The skills run the `seams` command, so install it too (Python 3.9 or later, no dependencies):
+
+```sh
+pipx install git+https://github.com/OverdriveEnergySolutions/seamreg
+# or: uv tool install git+https://github.com/OverdriveEnergySolutions/seamreg
+```
+
+Then, in your repo, ask Claude to "find this repo's seams". The `seams-review` skill shows what the review will cost and waits for your yes before it starts. Or follow the Quickstart below. For other agents, see [Use it with your agent](#use-it-with-your-agent).
+
 ## The idea
 
 - A **registry** (`seams.json`) lists each seam, its copies, its risk and its ties.
@@ -29,11 +47,7 @@ Nothing forces a refactor up front. Structure grows only where something broke.
 
 ## Quickstart
 
-Install the CLI from a clone (Python 3.9 or later, no dependencies):
-
-```sh
-pipx install .        # or: uv tool install .
-```
+Install the `seams` command (see [Install](#install)), or from a clone with `pipx install .` or `uv tool install .`.
 
 The package is named `seamreg`, because `seams` on PyPI is an unrelated project. The command it installs is `seams`.
 
