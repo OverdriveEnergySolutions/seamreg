@@ -3,5 +3,16 @@
   "version": "0.1.0",
   "description": "Find the knowledge a repo keeps in more than one place, record it in seams.json, and fail CI when the copies drift.",
   "license": "MIT",
-  "keywords": ["seams", "drift", "duplication", "technical-debt", "code-quality", "ci"]
+  "keywords": [
+    "seams",
+    "drift",
+    "duplication",
+    "technical-debt",
+    "code-quality",
+    "ci"
+  ],
+  "author": {
+    "name": "Overdrive Energy Solutions",
+    "url": "https://github.com/OverdriveEnergySolutions"
+  }
 }

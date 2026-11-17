@@ -1,3 +1,5 @@
+<img src=".claude-plugin/icon.png" alt="" width="96" align="right">
+
 # seams
 
 Find the knowledge your repo keeps in more than one place, and fail CI when the copies drift.

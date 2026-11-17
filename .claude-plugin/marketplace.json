@@ -1,5 +1,6 @@
 {
   "name": "seamreg",
+  "description": "seamreg: find the knowledge a repo keeps in more than one place, and catch the copies drifting.",
   "owner": {
     "name": "Overdrive Energy Solutions"
   },
