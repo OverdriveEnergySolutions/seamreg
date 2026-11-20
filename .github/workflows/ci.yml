@@ -4,14 +4,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # Run every version to the end: one failure must not cancel, and so hide, another.
+      fail-fast: false
       matrix:
         python: ["3.9", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - run: pip install -e . pytest
-      - run: pytest -q
+      # setup-python has no 3.9 for ubuntu-latest (Ubuntu 26.04) any more. uv installs any version, and
+      # the checker must keep working on 3.9.
+      - uses: astral-sh/setup-uv@v6
+      - run: |
+          uv venv --python ${{ matrix.python }}
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - run: uv pip install -e . pytest
+      - run: python --version && pytest -q
       - name: seams check
-        run: python3 src/seams/check.py
+        run: python src/seams/check.py

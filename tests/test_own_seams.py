@@ -28,7 +28,8 @@ def test_versions_agree():
 def test_documented_commands_exist():
     parser = cli.build_parser()
     real = set(parser._subparsers._group_actions[0].choices)
-    for doc in ("README.md", "skills/seams/SKILL.md", "skills/seams-review/SKILL.md"):
+    for doc in ("README.md", "skills/seams/SKILL.md", "skills/seams-review/SKILL.md", "docs/usage.md",
+                "docs/concepts.md", "docs/passes.md", "docs/benchmarks.md", "CONTRIBUTING.md"):
         named = set(re.findall(r"`seams ([a-z]+(?:-[a-z]+)*)", (ROOT / doc).read_text()))  # looked-at
         assert named, f"{doc} names no command"
         assert named <= real, f"{doc} names commands that do not exist: {named - real}"
