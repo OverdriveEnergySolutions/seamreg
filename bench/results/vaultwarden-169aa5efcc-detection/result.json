@@ -1,0 +1,58 @@
+{
+  "kind": "detection",
+  "repo_url": "https://github.com/dani-garcia/vaultwarden",
+  "snapshot": "169aa5efcc8d94684ff3bc813a00e6bcc0cc537a",
+  "snapshot_date": "2026-07-08",
+  "window_end": "baff1cabae39f55fd5111d0724d1389d08d00a63",
+  "window_end_date": "2026-11-19",
+  "files": 555,
+  "tool_commit": "1b481646de91e8c4a3ef077d7fd19bef383c357f",
+  "model": "claude-sonnet-5-5",
+  "effort": "max",
+  "cost_usd_api_equivalent": 25.08,
+  "complete": true,
+  "registry": {
+    "seams": 46,
+    "risk": {
+      "high": 1,
+      "medium": 17,
+      "low": 28
+    },
+    "drift_claims": 19
+  },
+  "blindscan": {
+    "tool_calls": 739,
+    "forbidden": 13,
+    "network": 1
+  },
+  "measures": {
+    "key_seams": {
+      "total": 20,
+      "full": 6,
+      "partial": 2
+    },
+    "key_drifts": {
+      "total": 17,
+      "caught": 2,
+      "partial": 1
+    },
+    "claims_graded": {
+      "sampled": 18,
+      "of": 18,
+      "fixed": 3,
+      "present": 15,
+      "wrong": 0,
+      "unclear": 0,
+      "wrong_detail": 0
+    }
+  },
+  "date": "2026-11-20",
+  "costs_usd_api_equivalent": {
+    "detection": 25.08,
+    "grade": 1.71,
+    "key": 3.68,
+    "total": 30.47
+  },
+  "resumes": 1,
+  "notes": "First run through the harness. The blind session stopped on a usage limit in its review turn and was resumed with RESUME=1 on another login (summary.json predates the resume counter). Blindness hits, all read: a reviewer made and removed an empty scratch folder in WORK and listed its file names; a checker ran ls ~/.cargo (no such folder); two hits are text that names a home path. No read of the key or the full clone. Window: 114 later commits, under the 300 the README calls a good sign. The key, the run and grading predate task.sh, so the key and grading sessions loaded the contributor's own setup. One key seam and its drift row (both missed by the run) are held back from the public key and grading until their fix ships in a vaultwarden release. They still count in the totals. Rescanned with the stricter 2026-11-20 rules (paths with .., more network forms): the 8 new hits are a second ls of WORKDIR (file names only), test strings and a code comment that contain .., and reads inside the blind clone (../src/db/schema.rs from blind/migrations) and text in a drift description; the 1 network hit is a grep for the text fetch(. None reached the key or the full clone."
+}

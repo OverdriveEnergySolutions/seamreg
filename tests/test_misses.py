@@ -110,6 +110,8 @@ def test_benchmark_runs_cannot_be_handed_the_library():
     # Reviewer-visible text must not point at the library: it holds benchmark answers.
     from pathlib import Path
     root = Path(misses.__file__).parents[2]
-    for f in list((root / "skills").rglob("*.md")) + list((root / "agents").glob("*.md")) + [
-            root / "src/seams/brief.md", root / "src/seams/verify-brief.md", root / "src/seams/tie-brief.md"]:
-        assert "catalog/" not in f.read_text(), f
+    # bench/ holds submitted answer keys, so the same holds for it.
+    for f in list((root / "skills").rglob("*.md")) + list((root / "agents").glob("*.md")) + list(
+            (root / "src/seams").glob("*brief.md")):
+        text = f.read_text()
+        assert "catalog/" not in text and "bench/" not in text, f

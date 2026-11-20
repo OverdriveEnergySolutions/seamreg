@@ -1,0 +1,5 @@
+{
+  "key_seams": {"total": 20, "full": 6, "partial": 2},
+  "key_drifts": {"total": 17, "caught": 2, "partial": 1},
+  "claims_graded": {"sampled": 18, "of": 18, "fixed": 3, "present": 15, "wrong": 0, "unclear": 0, "wrong_detail": 0}
+}

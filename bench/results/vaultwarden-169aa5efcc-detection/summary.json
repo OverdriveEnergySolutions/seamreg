@@ -1,0 +1,16 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "max",
+  "tool_commit": "1b481646de91e8c4a3ef077d7fd19bef383c357f",
+  "session_id": "e3609498-b741-4bfa-96c6-248d0c5a4183",
+  "turns": 4,
+  "complete": true,
+  "cost_usd_api_equivalent": 25.08,
+  "seams": 46,
+  "risk": {
+    "high": 1,
+    "medium": 17,
+    "low": 28
+  },
+  "drift_claims": 19
+}

@@ -75,6 +75,21 @@
         },
         {
           "path": "skills/seams-review/SKILL.md"
+        },
+        {
+          "path": "docs/usage.md"
+        },
+        {
+          "path": "docs/concepts.md"
+        },
+        {
+          "path": "docs/passes.md"
+        },
+        {
+          "path": "docs/benchmarks.md"
+        },
+        {
+          "path": "CONTRIBUTING.md"
         }
       ],
       "consequence": "An agent following the skill runs a command that does not exist.",
