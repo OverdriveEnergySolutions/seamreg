@@ -40,14 +40,14 @@ def render(rows):
         keys = []
         for _, r in items:
             keys += [k for k in r.get("measures", {}) if k not in keys]
-        head = ["Benchmark", "Snapshot", "Model, effort", "Cost (API-equivalent)", "Blind"] + keys
+        head = ["Benchmark", "Snapshot", "Model, effort", "Cost, all sessions (API-equivalent)", "Blind"] + keys
         out += [f"## {kind}", "", "| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
         for name, r in items:
             b = r["blindscan"]
             blind = "clean" if not (b["forbidden"] or b["network"]) else f"{b['forbidden']} + {b['network']} hits"
             cells = flatten(r.get("measures", {}))
             row = [name, f"`{r['snapshot'][:10]}` ({r['snapshot_date']})", f"{r['model']}, {r['effort']}",
-                   f"${r['cost_usd_api_equivalent']:.2f}", blind] + [cells.get(k, "") for k in keys]
+                   f"${(r.get('costs_usd_api_equivalent') or {}).get('total', r['cost_usd_api_equivalent']):.2f}", blind] + [cells.get(k, "") for k in keys]
             out.append("| " + " | ".join(row) + " |")
         out.append("")
     return "\n".join(out)

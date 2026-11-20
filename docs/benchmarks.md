@@ -20,8 +20,8 @@ the dollars as a relative measure, for comparing one step or model with another.
    times). Fable 5.2, 27 against 15 (1.8 times). Sonnet 5.5, on 17 tasks (7 of them among the 9), 28 of
    36 against 13 (2.2 times). Without seamreg the most common failure is an agent that notices the stale
    copy, says so, and leaves it.
-2. **The weak link is getting the seam into the registry.** On the three newest benchmark repos, one blind
-   first review recorded a third to a half of the seams an answer key lists, and caught 2 to 4 of 11 to 16
+2. **The weak link is getting the seam into the registry.** On the four newest benchmark repos, one blind
+   first review recorded a third to a half of the seams an answer key lists, and caught 2 to 4 of 11 to 17
    known drifts. On older repos the range was much wider. On firefly-iii, reviews on Sonnet and on Opus
    missed the same 11 of 14 known drifts, for the same reason, so more of the same review does not close
    the gap.
@@ -62,6 +62,12 @@ The harness is built to grow. Each kind of benchmark is one folder in
 [bench/kinds/](../bench/kinds/README.md), on top of shared parts for the snapshot, the blind session, the
 blindness scan and the result file. Detection is the first kind. If you find a new question worth
 measuring, add a kind.
+
+The first result through the harness is vaultwarden (Rust, 555 files, snapshot after the models'
+training cutoff): 2 of 17 known drifts stated, 1 in part, 6 of 20 key seams in full, and 18 other claims
+graded with none wrong. It cost $30.47 API-equivalent for the key, the blind run and the grading. Its files
+are in [bench/results/](../bench/results/vaultwarden-169aa5efcc-detection/). One key row is held back
+there until its fix ships in a vaultwarden release.
 
 To ask us to run one instead, open an issue with the **Benchmark request** template.
 
@@ -163,6 +169,7 @@ developer CLAUDE.md.
 | [plausible](https://github.com/plausible/analytics) | Elixir, TypeScript | `1c539f6bf0` | 2 of 11 | 0.1 and 0.2 brief, Opus |
 | [dawarich](https://github.com/Freika/dawarich) | Rails | `7b877f9cc9` | 4 of 16, 1 partial | 0.2 brief, Opus and Sonnet |
 | [firefly-iii](https://github.com/firefly-iii/firefly-iii) | Laravel | `a95b82b14c` | 2 of 14, 1 partial | 0.2 brief, Opus and Sonnet |
+| [vaultwarden](https://github.com/dani-garcia/vaultwarden) | Rust | `169aa5efcc` | 2 of 17, 1 partial | 0.2, Sonnet, through the [harness](../bench/results/vaultwarden-169aa5efcc-detection/) |
 
 plausible, dawarich and firefly-iii were picked on fixed criteria (a stack not yet tested, 500 to 3,000
 files, many fix commits after the snapshot) before anyone looked at their seams. A first review costs $12
