@@ -122,3 +122,8 @@ def test_the_scan_flags_the_workspace_itself_and_a_climb_before_a_newline(tmp_pa
     (proj / "s2.jsonl").write_text(line + "\n")
     _, hits, _ = blindscan.scan(blindscan.transcripts("s2", home=tmp_path), pat)
     assert len(hits) == 1
+
+
+def test_the_scan_flags_permission_changes_in_any_form():
+    for t in ("chmod 755 ../key", "/usr/bin/chmod 7 x", "os.chmod(p, 0o755)", "fs.chownSync(p)", "shutil.chown(p)", "install -m 644 a b"):
+        assert blindscan.PERMS.search(t), t

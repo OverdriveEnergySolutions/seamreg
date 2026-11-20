@@ -31,7 +31,9 @@ NET = re.compile(r"(?:^|(?<=[\s'\"`{;&|(]))(curl|wget|gh|nc|ssh|scp)\s+(?![=:(,)
 # needs a look, because the session starts in the blind clone, next to the folders it must not read.
 CLIMB = re.compile(r"(?<![\w.~])\.\.(?![\w.])")
 # Changing file modes, owners or attributes could undo the lock session.sh puts on the other folders.
-PERMS = re.compile(r"(?:^|(?<=[\s'\"`{;&|(]))(chmod|chown|chgrp|setfacl|chattr|icacls|takeown)\s")
+# Matched as a whole word anywhere, so /usr/bin/chmod, os.chmod, fs.chownSync and perl chmod all count.
+PERMS = re.compile(r"\b(chmod|chown|chgrp|lchown|fchmod|lchmod|fchown)(?:Sync)?\b|\b(setfacl|chattr|icacls|takeown)\b"
+                   r"|\binstall\s+-m")
 ALLOWED_IN_WORK = (r"blind(?:/|\b)", r"tool/skills", r"tool/agents", r"tool(?![/\w.-])")
 
 
