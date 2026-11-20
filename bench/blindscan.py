@@ -19,11 +19,13 @@ import re
 import sys
 from pathlib import Path
 
-# A network command in command position: at the start, or after a newline, ;, &, |, ( or $(.
-NET = re.compile(r"(?:^|[\n;&|(]|\$\()\s*(?:sudo\s+)?(curl|wget|gh|nc|ssh|scp)\s|git\s+(fetch|pull|clone|ls-remote|remote\s+add)"
+# A network tool used as a command: after whitespace, a quote, a backtick, {, ;, &, |, ( or $(, so
+# wrapped calls (bash -c "curl ...", xargs curl, timeout 5 gh ...) still count. A name followed by =, :,
+# (, , or ) is a variable or a key (const gh = ...), not a call, and is left out. False alarms cost a
+# look; a missed call costs a leak.
+NET = re.compile(r"(?:^|(?<=[\s'\"`{;&|(]))(curl|wget|gh|nc|ssh|scp)\s+(?![=:(,)])"
+                 r"|git\s+(fetch|pull|clone|ls-remote|remote\s+add)"
                  r"|pip3? install|uv (add|pip install)|npm (install|view)|npx |yarn add|go get ")
-# In WORKDIR a session may touch: the blind clone, the frozen tool's skills and agents, the tool folder
-# itself as a command argument (uvx --from WORKDIR/tool seams), and its own temp folder.
 ALLOWED_IN_WORK = (r"blind(?:/|\b)", r"tool/skills", r"tool/agents", r"tool(?![/\w.-])")
 
 

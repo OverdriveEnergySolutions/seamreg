@@ -78,6 +78,8 @@ def test_the_scan_flags_the_home_folder_and_network_commands_only_in_command_pos
     pat = blindscan.forbidden_pattern(Path("/var/tmp/b/ws"), None, "detection", Path("/home/u"))
     assert pat.search("ls ~/.cargo") and pat.search("cat /home/u/.ssh/id") and not pat.search("/var/tmp/b/ws/blind/x")
     assert blindscan.NET.search("cd a && gh pr list") and not blindscan.NET.search("const gh = (sha) => 1;")
+    for wrapped in ('bash -c "curl x"', "xargs curl -s", "timeout 5 gh api x", "`wget x`", "env A=1 nc -l 1"):
+        assert blindscan.NET.search(wrapped), wrapped
 
 
 def test_the_table_shows_any_kinds_measures_without_changes(tmp_path):
