@@ -78,7 +78,9 @@ Follow these in order. Stop and tell the user if any step fails.
    ```sh
    "$SEAMREG/bench/snapshot.sh" <repo url> <snapshot commit> "$WORK"
    ```
-4. **Follow the kind's README** from here. For `detection`: build the key, run blind, scan, grade.
+4. **Follow the kind's README** from here. While a blind session runs, `session.sh` makes the other
+   folders in `$WORK` unreadable, and puts them back when it ends. If it is killed hard (`kill -9`), they
+   stay locked until you run the same session again, which unlocks them first. For `detection`: build the key, run blind, scan, grade.
 5. **Check the blindness scan.** Read every hit. A hit can be harmless (a path named in a reply), but a
    read of the key, the full clone or the miss library makes the run invalid. Say which it is.
 6. **Assemble the result:**

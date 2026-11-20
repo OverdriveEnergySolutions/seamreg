@@ -110,3 +110,15 @@ def test_a_result_refuses_an_unfinished_run(tmp_path):
     summary.write_text(json.dumps(dict(json.loads(summary.read_text()), complete=False)))
     with pytest.raises(ValueError, match="did not finish"):
         result.build(tmp_path, "detection", "detection")
+
+
+def test_the_scan_flags_the_workspace_itself_and_a_climb_before_a_newline(tmp_path):
+    pat = blindscan.forbidden_pattern(Path("/w/ws"), None, "detection")
+    assert pat.search("ls /w/ws") and pat.search('ls "/w/ws/"') and not pat.search("/w/ws/blind/a.py")
+    proj = tmp_path / "projects" / "p"
+    proj.mkdir(parents=True)
+    line = json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "Bash", "input": {"command": "cd ..\nls"}}]}})
+    (proj / "s2.jsonl").write_text(line + "\n")
+    _, hits, _ = blindscan.scan(blindscan.transcripts("s2", home=tmp_path), pat)
+    assert len(hits) == 1

@@ -47,6 +47,7 @@ def forbidden_pattern(work, checkout, name=None, home=None):
     allowed = list(ALLOWED_IN_WORK) + ([re.escape(name) + r"/tmp(?:/|\b)"] if name else [])
     parts = [
         rf"{work}/(?!(?:{'|'.join(allowed)}))",         # anything in WORKDIR but the allowed places
+        rf"{work}/?(?=$|[\s'\";|&)])",                       # WORKDIR itself, such as ls WORKDIR
         r"/catalog/", r"\.claude/projects/",           # the miss library, other transcripts
     ]
     if checkout:
@@ -92,7 +93,9 @@ def scan(files, forbid, show=False):
                 text = json.dumps(c.get("input"))
                 if c.get("name") in ("WebFetch", "WebSearch"):
                     net.append(f"{c['name']}: {text[:160]}")
-                if forbid.search(text) or CLIMB.search(text):
+                # Check the raw values too: in the JSON text a newline after .. reads as \n.
+                raw = "\n".join(str(v) for v in (c.get("input") or {}).values() if isinstance(v, str))
+                if forbid.search(text) or CLIMB.search(text) or CLIMB.search(raw):
                     hits.append((f"{c.get('name')}: {text[:200]}",
                                  seen.get(c.get("id"), "(no result)")[:400].replace("\n", " | ") if show else None))
                 if c.get("name") in ("Bash", "PowerShell"):
