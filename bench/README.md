@@ -32,7 +32,7 @@ The parts are separate so new kinds of benchmark can reuse them:
 | Part | What it does | Who uses it |
 |---|---|---|
 | [`snapshot.sh`](snapshot.sh) | Makes a workspace: a full clone, a blind clone at the snapshot, and `bench.json` | Every kind |
-| [`session.sh`](session.sh) | Runs one prompt blind in the workspace, and records the model, effort and cost | Every kind that runs seamreg |
+| [`session.sh`](session.sh) | Runs one prompt blind in the workspace, and records the model, effort and cost. `RESUME=1` continues a session that stopped early | Every kind that runs seamreg |
 | [`blindscan.py`](blindscan.py) | Checks one blind session's transcripts | Every blind session |
 | [`result.py`](result.py) | Writes `result.json`: a common envelope plus the kind's own `measures` | Every kind |
 | [`table.py`](table.py) | Prints the statistics from `results/`, one table per kind | Maintainers |

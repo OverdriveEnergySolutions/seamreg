@@ -9,6 +9,9 @@
 # PROMPT_FILE may use @TOOL@ (the frozen tool copy) and @WORK@ (WORKDIR). It must ask the session to
 # end its final message with the line RUN COMPLETE. Until it does, the script resumes the session with
 # the text of ANSWER_FILE (default: a yes that takes every recommended option), up to MAX_TURNS turns.
+#
+# RESUME=1 continues a session that stopped before RUN COMPLETE (a usage limit, a crash, a lost
+# connection): same session, same tool copy, same blindness. Run it with the same arguments.
 # It uses a frozen copy of this seamreg checkout (WORKDIR/tool, from its HEAD commit, without docs/
 # and bench/), so editing seamreg during a run changes nothing.
 # It runs on your normal Claude Code login, so a subscription works. No settings file loads: not yours,
@@ -22,7 +25,11 @@ HERE=$(cd "$(dirname "$0")/.." && pwd)
 MODEL=${MODEL:-claude-sonnet-5-5}; EFFORT=${EFFORT:-max}; MAX_TURNS=${MAX_TURNS:-6}
 B=$W/blind; T=$W/tool; R=$W/$NAME
 [ -d "$B/.git" ] || { echo "run: no blind clone in $W (run bench/snapshot.sh first)" >&2; exit 1; }
-[ -e "$R" ] && { echo "run: $R exists already; move it aside to run again" >&2; exit 1; }
+if [ "${RESUME:-}" = 1 ]; then
+    [ -s "$R/session-id" ] || { echo "run: nothing to resume in $R" >&2; exit 1; }
+else
+    [ -e "$R" ] && { echo "run: $R exists already; move it aside, or set RESUME=1 to continue it" >&2; exit 1; }
+fi
 mkdir -p "$R/tmp"
 log() { echo "$(date '+%F %T') $*" | tee -a "$R/run.log"; }
 
@@ -38,8 +45,12 @@ TOOL_SHA=$(cat "$T/.bench-commit")
 
 ANSWER_DEFAULT="Yes. Take your recommended option for every choice: one seam-reviewer per packet at max effort; for the drift check, the skill's default selection at default effort, and skip any optional second-opinion pass; for notes or agents, your pick. Then continue to the end of the workflow."
 ANSWER=$ANSWER_DEFAULT; [ -n "${ANSWER_FILE:-}" ] && ANSWER=$(cat "$ANSWER_FILE")
-sed -e "s|@TOOL@|$T|g" -e "s|@WORK@|$W|g" "$PROMPT" > "$R/prompt.md"
-SID=$(python3 -c "import uuid; print(uuid.uuid4())"); echo "$SID" > "$R/session-id"
+if [ "${RESUME:-}" = 1 ]; then
+    SID=$(cat "$R/session-id")
+else
+    sed -e "s|@TOOL@|$T|g" -e "s|@WORK@|$W|g" "$PROMPT" > "$R/prompt.md"
+    SID=$(python3 -c "import uuid; print(uuid.uuid4())"); echo "$SID" > "$R/session-id"
+fi
 
 result() { python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('result') or '')" "$1" 2>/dev/null; }
 failed() { python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('is_error') or d.get('subtype')!='success' else 1)" "$1" 2>/dev/null; }
@@ -53,15 +64,23 @@ turn() {  # turn N MESSAGE [first]
 }
 
 log "$NAME: $(python3 -c "import json;print(json.load(open('$W/bench.json'))['repo_url'])") at $(git -C "$B" rev-parse --short HEAD), seamreg ${TOOL_SHA:0:10}, $MODEL at $EFFORT effort"
-turn 1 "$(cat "$R/prompt.md")" first || { log "STOP: turn 1 failed, see $R/turn1.err"; exit 1; }
-n=1
+if [ "${RESUME:-}" = 1 ]; then
+    n=$(ls "$R"/turn*.json 2>/dev/null | sed 's/.*turn\([0-9]*\)\.json/\1/' | sort -n | tail -1)
+    n=${n:-0}; log "resume: session $SID after turn $n"
+    n=$((n + 1)); turn $n "Continue where you stopped. $ANSWER" || { log "STOP: turn $n failed, see $R/turn$n.err"; }
+    MAX_TURNS=$((n + MAX_TURNS - 1))
+else
+    turn 1 "$(cat "$R/prompt.md")" first || { log "STOP: turn 1 failed, see $R/turn1.err"; exit 1; }
+    n=1
+fi
 while ! result "$R/turn$n.json" | tail -c 300 | grep -q 'RUN COMPLETE'; do
+    failed "$R/turn$n.json" && break
     [ $n -ge "$MAX_TURNS" ] && { log "STOP: no RUN COMPLETE after $n turns"; break; }
     n=$((n + 1)); turn $n "$ANSWER" || { log "STOP: turn $n failed, see $R/turn$n.err"; break; }
 done
 
 # Save what the run made. leads.json is large and the scan can rebuild it.
-mkdir -p "$R/results"
+rm -rf "$R/results"; mkdir -p "$R/results"
 cp "$B/seams.json" "$R/results/seams.json" 2>/dev/null
 cp -r "$B/.seams-scan" "$R/results/seams-scan" 2>/dev/null; rm -f "$R/results/seams-scan/leads.json"
 mv "$B/.seams-feedback.md" "$R/results/feedback.md" 2>/dev/null
@@ -88,4 +107,8 @@ out = {"model": model, "effort": effort, "tool_commit": tool, "session_id": sid,
 json.dump(out, open(os.path.join(r, "summary.json"), "w"), indent=2)
 print(json.dumps(out))
 PY
-log "saved $R/results and $R/summary.json. Next: python3 bench/blindscan.py $W $NAME"
+if python3 -I -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))['complete'] else 1)" "$R/summary.json"; then
+    log "saved $R/results and $R/summary.json. Next: python3 bench/blindscan.py $W $NAME"
+else
+    log "saved $R/results, but the session did not finish. Fix the cause in the last turn*.err, then run again with RESUME=1"
+fi

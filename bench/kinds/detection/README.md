@@ -44,7 +44,9 @@ export SEAMREG=/path/to/seamreg WORK=/srv/bench/owner-repo
    MODEL=claude-sonnet-5-5 EFFORT=max "$SEAMREG/bench/session.sh" "$WORK" detection "$SEAMREG/bench/kinds/detection/prompt.md"
    ```
    It answers the review's cost question with yes, so it starts the review without asking you. It saves
-   to `$WORK/detection/`. Read `summary.json`: `complete` must be true.
+   to `$WORK/detection/`. Read `summary.json`: `complete` must be true. If the session stopped early (a
+   usage limit, a crash, a lost connection), the log says so. Fix the cause, then run the same command
+   with `RESUME=1` in front. It continues the same session, so the run stays one blind run.
 
 4. **Check the blindness scan:**
    ```sh
