@@ -44,7 +44,8 @@ Aim for 15 to 25 seams and 8 or more drift rows. A key with fewer than 5 drift r
 2. **One section per seam,** with an id in kebab-case, then: what must agree, the copies (file and
    symbol), the risk (high, medium or low, as below), and any test that ties the copies today.
 3. **The drift table,** one row per drift: a row number, the seam id, what differed at the snapshot
-   (both sides, with file and line at the snapshot), the fixing commit and its date.
+   (both sides, with file and line at the snapshot), the fixing commit and its date. Give the commit date
+   as `git log -1 --format=%cs <commit>` prints it.
 4. **Not counted.** Fixes you read and rejected, one line each with the reason. Probable drifts you could
    not confirm, marked "unverified".
 

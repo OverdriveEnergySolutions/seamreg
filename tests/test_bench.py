@@ -62,6 +62,22 @@ def test_a_result_holds_the_envelope_and_the_kinds_own_measures(tmp_path):
     assert out["kind"] == "detection" and out["measures"] == measures
     assert out["blindscan"] == {"tool_calls": 812, "forbidden": 0, "network": 0}
     assert out["cost_usd_api_equivalent"] == 41.5 and out["registry"]["seams"] == 50
+    assert out["costs_usd_api_equivalent"] == {"detection": 41.5, "total": 41.5} and out["resumes"] == 0
+
+
+def test_a_result_adds_the_key_and_grading_costs(tmp_path):
+    make_workspace(tmp_path, {})
+    (tmp_path / "sessions").mkdir()
+    (tmp_path / "sessions" / "key.json").write_text(json.dumps({"total_cost_usd": 3.684}))
+    (tmp_path / "sessions" / "grade.json").write_text(json.dumps({"total_cost_usd": 1.71}))
+    costs = result.build(tmp_path, "detection", "detection")["costs_usd_api_equivalent"]
+    assert costs == {"detection": 41.5, "grade": 1.71, "key": 3.68, "total": 46.89}
+
+
+def test_the_scan_flags_the_home_folder_and_network_commands_only_in_command_position():
+    pat = blindscan.forbidden_pattern(Path("/var/tmp/b/ws"), None, "detection", Path("/home/u"))
+    assert pat.search("ls ~/.cargo") and pat.search("cat /home/u/.ssh/id") and not pat.search("/var/tmp/b/ws/blind/x")
+    assert blindscan.NET.search("cd a && gh pr list") and not blindscan.NET.search("const gh = (sha) => 1;")
 
 
 def test_the_table_shows_any_kinds_measures_without_changes(tmp_path):

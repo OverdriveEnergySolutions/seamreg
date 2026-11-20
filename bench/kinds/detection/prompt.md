@@ -9,6 +9,7 @@ Rules for this run:
 - Show me the plan and its cost before you start any reviewer, and wait for my yes. Do the same before the drift check.
 - For the drift check, check every seam the skill's default selects. Do not sample.
 - Read nothing outside this repo except @TOOL@/skills/, @TOOL@/agents/, and the files the seams commands write. Never open any other file under @TOOL@, anything under @WORK@ outside this repo, or any other folder in your home folder. Do not use the web, GitHub or git remotes.
+- For scratch files, use the folder in the environment variable $TMPDIR. Write nothing else outside this repo.
 - Go through `seams merge`, the drift check and `seams apply`. Settle the merge report the way the skill says, turn on notes, and run the check. Do not commit.
 
 At the end, report the seam count, the split by risk, the drift found by the reviewers and by the drift check, and the items in .seams-feedback.md.

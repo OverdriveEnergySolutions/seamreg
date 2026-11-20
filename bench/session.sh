@@ -67,23 +67,30 @@ log "$NAME: $(python3 -c "import json;print(json.load(open('$W/bench.json'))['re
 if [ "${RESUME:-}" = 1 ]; then
     n=$(ls "$R"/turn*.json 2>/dev/null | sed 's/.*turn\([0-9]*\)\.json/\1/' | sort -n | tail -1)
     n=${n:-0}; log "resume: session $SID after turn $n"
-    n=$((n + 1)); turn $n "Continue where you stopped. $ANSWER" || { log "STOP: turn $n failed, see $R/turn$n.err"; }
+    # A stop saved a copy of the run's notes; put it back if the repo lost it.
+    [ -f "$B/.seams-feedback.md" ] || cp "$R/results/feedback.md" "$B/.seams-feedback.md" 2>/dev/null
+    n=$((n + 1)); turn $n "Continue where you stopped. $ANSWER" || { log "STOP: turn $n failed, see the result in $R/turn$n.json and $R/turn$n.err"; }
     MAX_TURNS=$((n + MAX_TURNS - 1))
 else
-    turn 1 "$(cat "$R/prompt.md")" first || { log "STOP: turn 1 failed, see $R/turn1.err"; exit 1; }
+    turn 1 "$(cat "$R/prompt.md")" first || { log "STOP: turn 1 failed, see the result in $R/turn1.json and $R/turn1.err"; exit 1; }
     n=1
 fi
 while ! result "$R/turn$n.json" | tail -c 300 | grep -q 'RUN COMPLETE'; do
     failed "$R/turn$n.json" && break
     [ $n -ge "$MAX_TURNS" ] && { log "STOP: no RUN COMPLETE after $n turns"; break; }
-    n=$((n + 1)); turn $n "$ANSWER" || { log "STOP: turn $n failed, see $R/turn$n.err"; break; }
+    n=$((n + 1)); turn $n "$ANSWER" || { log "STOP: turn $n failed, see the result in $R/turn$n.json and $R/turn$n.err"; break; }
 done
 
 # Save what the run made. leads.json is large and the scan can rebuild it.
 rm -rf "$R/results"; mkdir -p "$R/results"
 cp "$B/seams.json" "$R/results/seams.json" 2>/dev/null
 cp -r "$B/.seams-scan" "$R/results/seams-scan" 2>/dev/null; rm -f "$R/results/seams-scan/leads.json"
-mv "$B/.seams-feedback.md" "$R/results/feedback.md" 2>/dev/null
+# Copy the run's notes while the session may still resume. Move them only once it finished.
+if result "$R/turn$n.json" | tail -c 300 | grep -q 'RUN COMPLETE'; then
+    mv "$B/.seams-feedback.md" "$R/results/feedback.md" 2>/dev/null
+else
+    cp "$B/.seams-feedback.md" "$R/results/feedback.md" 2>/dev/null
+fi
 (cd "$B" && git diff > "$R/results/repo-changes.diff")
 rm -rf "$R/tmp"
 python3 -I - "$R" "$MODEL" "$EFFORT" "$TOOL_SHA" "$SID" <<'PY'
@@ -103,12 +110,13 @@ except Exception: pass
 out = {"model": model, "effort": effort, "tool_commit": tool, "session_id": sid, "turns": len(turns),
        "complete": done, "cost_usd_api_equivalent": round(cost, 2), "seams": len(seams),
        "risk": {k: sum(s.get("risk") == k for s in seams) for k in ("high", "medium", "low")},
-       "drift_claims": sum(bool(s.get("drift")) for s in seams)}
+       "drift_claims": sum(bool(s.get("drift")) for s in seams),
+       "resumes": sum("resume: session" in l for l in open(os.path.join(r, "run.log")))}
 json.dump(out, open(os.path.join(r, "summary.json"), "w"), indent=2)
 print(json.dumps(out))
 PY
 if python3 -I -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))['complete'] else 1)" "$R/summary.json"; then
     log "saved $R/results and $R/summary.json. Next: python3 bench/blindscan.py $W $NAME"
 else
-    log "saved $R/results, but the session did not finish. Fix the cause in the last turn*.err, then run again with RESUME=1"
+    log "saved $R/results, but the session did not finish. The reason is in the last turn*.json (its result) or turn*.err. Fix it (for a usage limit: wait for the reset, or log in to another account), then run again with RESUME=1"
 fi

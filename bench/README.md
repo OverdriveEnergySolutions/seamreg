@@ -33,7 +33,8 @@ The parts are separate so new kinds of benchmark can reuse them:
 |---|---|---|
 | [`snapshot.sh`](snapshot.sh) | Makes a workspace: a full clone, a blind clone at the snapshot, and `bench.json` | Every kind |
 | [`session.sh`](session.sh) | Runs one prompt blind in the workspace, and records the model, effort and cost. `RESUME=1` continues a session that stopped early | Every kind that runs seamreg |
-| [`blindscan.py`](blindscan.py) | Checks one blind session's transcripts | Every blind session |
+| [`task.sh`](task.sh) | Runs a non-blind session (the key, the grading) with the same isolation, and keeps its cost | Every kind with a key or a grader |
+| [`blindscan.py`](blindscan.py) | Checks one blind session's transcripts. `--show` prints what each flagged call returned | Every blind session |
 | [`result.py`](result.py) | Writes `result.json`: a common envelope plus the kind's own `measures` | Every kind |
 | [`table.py`](table.py) | Prints the statistics from `results/`, one table per kind | Maintainers |
 | [`kinds/`](kinds/) | One folder per kind of benchmark: its question, its prompts, its briefs | See [kinds/README.md](kinds/README.md) |
@@ -47,16 +48,18 @@ The parts are separate so new kinds of benchmark can reuse them:
 - Disk space for two clones of the target repo. Put the workspace on a real disk, outside your home
   folder: `/tmp` is a small RAM disk on some systems, and a workspace in your home folder can load your
   own `CLAUDE.md` files into the blind session.
-- Time and usage. A detection benchmark is three sessions. The blind run is the large one: it is a full
-  first review ([docs/passes.md](../docs/passes.md) lists what reviews cost).
+- Time and usage. A detection benchmark is three sessions: the key (10 to 30 minutes), the blind run
+  (30 to 90 minutes, a full first review, see [docs/passes.md](../docs/passes.md)) and the grading (5 to
+  20 minutes). The first harness run, on a 555-file repo, cost $30.47 API-equivalent in all.
 
 ## Safety
 
 A benchmark runs agents on someone else's code, with permission to run commands. Treat the target repo as
 untrusted.
 
-- The blind session loads no settings files, neither yours nor the repo's own `.claude/settings*.json`,
-  whose hooks could otherwise run commands on your machine. It loads no MCP servers. The repo's
+- The blind session (`session.sh`) and the key and grading sessions (`task.sh`) load no settings files,
+  neither yours nor the repo's own `.claude/settings*.json`, whose hooks could otherwise run commands on
+  your machine. They load no MCP servers. The repo's
   `CLAUDE.md` files still load as text, as they would for any agent working there.
 - The key and grading sessions read the full repo as well. Text in a repo can try to steer an agent.
 - For a repo you do not trust, run the whole benchmark in a container or a virtual machine that holds no
@@ -97,12 +100,14 @@ Open a pull request that adds one folder, `bench/results/<repo>-<snapshot first 
 | `result.json` | Yes |
 | `blindscan.txt` | Yes |
 | The kind's key and grading files (for detection: `key.md`, `grading.md`) | Yes |
-| The session's `summary.json` and the run's `feedback.md` | Yes |
+| The session's `summary.json` | Yes |
+| The run's `feedback.md` (its notes on the skill) | Only if it names no drift that is still open. Otherwise send it to a maintainer |
 | Anything else the kind's README lists | As listed |
 
 Leave out the run's own registry and reviewer output. A run records bugs that may still be open in
 someone else's project, and some may touch security. Keep them, and send them to a maintainer if asked.
-Report anything about security that is still open to that project's own security contact.
+Report anything about security that is still open to that project's own security contact. If a key row describes a
+security fix that the project has not shipped in a release yet, wait for the release before you submit.
 
 In the pull request, say: the repo and why you picked it, the model and effort, the cost, every
 blindness scan hit and what it was, and anything that went wrong.

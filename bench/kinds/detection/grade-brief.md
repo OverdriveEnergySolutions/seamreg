@@ -13,6 +13,7 @@ Your workspace is the folder that holds this run's `bench.json` (the repo, the s
   reviewer output and reports.
 - `full/` is the full-history clone, read only (`git show <commit>:<path>`, `git log`, `git grep`).
 - Write only `detection/grade/grading.md` and `detection/grade/measures.json`.
+- You may read a library's public docs or source to settle a claim. Say when you did, in the reason.
 
 ## 1. Key seams
 
@@ -32,7 +33,8 @@ describes the same disagreement on the same copies.
 
 ## 3. Other claims
 
-Take the run's drift claims and bug entries that match no key row. If there are more than 20, take 20 at
+Take the run's drift claims and bug entries that match no key row. When one entry holds several claims
+and only some match a key row, grade the rest here, and say so in its reason. If there are more than 20, take 20 at
 random and say how you picked them. For each one, read both sides at the snapshot, and again at the
 window's end, and give one verdict:
 - **FIXED**: true at the snapshot, and changed later so the copies agree.
@@ -44,8 +46,9 @@ Also count claims that are true but carry a wrong detail (a wrong line, a wrong 
 ## Output
 
 `grading.md`: a table per step, one row per key seam, key drift and sampled claim, each with a
-one-sentence reason. For a PRESENT claim, give the verdict and the seam id only. Do not describe it:
-that is an open bug in someone else's project. Leave out anything about security that is still open.
+one-sentence reason. For a PRESENT claim, give the verdict and a number ("open claim 1"), not the seam id. Do not
+describe it anywhere in the file, including in notes about how you split entries: it is an open bug in
+someone else's project, and a seam id can say what it is. Leave out anything about security that is still open.
 
 `measures.json`, exactly these fields:
 

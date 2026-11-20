@@ -41,6 +41,15 @@ def build(work, name, kind, submitter=None, notes=None):
            **{k: summary[k] for k in ("tool_commit", "model", "effort", "cost_usd_api_equivalent", "complete")},
            "registry": {k: summary[k] for k in ("seams", "risk", "drift_claims")},
            "blindscan": scan, "measures": measures, "date": datetime.date.today().isoformat()}
+    # Every session's cost: the blind run, plus any key, grading or other session bench/task.sh ran.
+    costs = {name: summary["cost_usd_api_equivalent"]}
+    for f in sorted((work / "sessions").glob("*.json")) if (work / "sessions").is_dir() else []:
+        try:
+            costs[f.stem] = round(json.loads(f.read_text()).get("total_cost_usd") or 0, 2)
+        except ValueError:
+            pass
+    out["costs_usd_api_equivalent"] = dict(costs, total=round(sum(costs.values()), 2))
+    out["resumes"] = summary.get("resumes", 0)
     if submitter:
         out["submitter"] = submitter
     if notes:
