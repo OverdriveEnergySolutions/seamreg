@@ -50,6 +50,18 @@ The parts are separate so new kinds of benchmark can reuse them:
 - Time and usage. A detection benchmark is three sessions. The blind run is the large one: it is a full
   first review ([docs/passes.md](../docs/passes.md) lists what reviews cost).
 
+## Safety
+
+A benchmark runs agents on someone else's code, with permission to run commands. Treat the target repo as
+untrusted.
+
+- The blind session loads no settings files, neither yours nor the repo's own `.claude/settings*.json`,
+  whose hooks could otherwise run commands on your machine. It loads no MCP servers. The repo's
+  `CLAUDE.md` files still load as text, as they would for any agent working there.
+- The key and grading sessions read the full repo as well. Text in a repo can try to steer an agent.
+- For a repo you do not trust, run the whole benchmark in a container or a virtual machine that holds no
+  credentials except your Claude Code login.
+
 ## Steps for a session that runs a benchmark
 
 Follow these in order. Stop and tell the user if any step fails.

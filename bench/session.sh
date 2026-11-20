@@ -11,8 +11,9 @@
 # the text of ANSWER_FILE (default: a yes that takes every recommended option), up to MAX_TURNS turns.
 # It uses a frozen copy of this seamreg checkout (WORKDIR/tool, from its HEAD commit, without docs/
 # and bench/), so editing seamreg during a run changes nothing.
-# It runs on your normal Claude Code login, so a subscription works. Your own settings, skills,
-# plugins, hooks and MCP servers are turned off for the run.
+# It runs on your normal Claude Code login, so a subscription works. No settings file loads: not yours,
+# and not the target repo's own .claude/settings*.json, whose hooks could run commands on your machine.
+# No MCP server loads either. Only the frozen seamreg plugin is added.
 set -uo pipefail
 W=$(cd "${1:?workdir from bench/snapshot.sh}" && pwd)
 NAME=${2:?a name for the output folder of this session, such as detection}
@@ -46,8 +47,8 @@ turn() {  # turn N MESSAGE [first]
     local how=(--resume "$SID"); [ -n "${3:-}" ] && how=(--session-id "$SID")
     (cd "$B" && TMPDIR="$R/tmp" ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p "$2" "${how[@]}" \
         --plugin-dir "$T" --model "$MODEL" --effort "$EFFORT" --permission-mode auto \
-        --setting-sources project,local --strict-mcp-config --output-format json \
-        > "$R/turn$1.json" 2> "$R/turn$1.err")
+        --setting-sources "" --strict-mcp-config --output-format json \
+        < /dev/null > "$R/turn$1.json" 2> "$R/turn$1.err")
     [ -s "$R/turn$1.json" ] && ! failed "$R/turn$1.json"
 }
 

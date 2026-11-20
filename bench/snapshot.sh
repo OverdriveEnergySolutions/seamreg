@@ -9,9 +9,10 @@
 # WORKDIR/bench.json  the workspace's facts, which the other scripts read.
 set -euo pipefail
 URL=${1:?repo url}; SNAP=${2:?snapshot commit}; W=${3:?workdir}
+if ! [[ $SNAP =~ ^[0-9a-fA-F]{7,40}$ ]]; then echo "snapshot: give the snapshot as a commit hash" >&2; exit 1; fi
 if [ -e "$W/blind" ]; then echo "snapshot: $W/blind exists already" >&2; exit 1; fi
 mkdir -p "$W"; W=$(cd "$W" && pwd)
-[ -d "$W/full/.git" ] || git clone -q "$URL" "$W/full"
+[ -d "$W/full/.git" ] || git clone -q -- "$URL" "$W/full"
 FULL_SHA=$(git -C "$W/full" rev-parse --verify "$SNAP^{commit}")
 git -C "$W/full" branch -f bench-snapshot "$FULL_SHA" >/dev/null
 git clone -q --single-branch --branch bench-snapshot --no-tags "file://$W/full" "$W/blind"
@@ -27,11 +28,14 @@ echo ".seams-feedback.md" >> "$W/blind/.git/info/exclude"
 SNAP_DATE=$(git -C "$W/full" log -1 --format=%cs "$FULL_SHA")
 END_SHA=$(git -C "$W/full" rev-parse HEAD); END_DATE=$(git -C "$W/full" log -1 --format=%cs HEAD)
 LATER=$(git -C "$W/full" rev-list --count --no-merges "$FULL_SHA..HEAD")
-python3 - "$W/bench.json" <<PY
+# The values go in as arguments, never into the Python source, so no URL can inject code.
+python3 -I - "$W/bench.json" "$URL" "$FULL_SHA" "$SNAP_DATE" "$END_SHA" "$END_DATE" "$LATER" \
+    "$(git -C "$W/blind" ls-files | wc -l)" <<'PY'
 import json, sys
-json.dump({"repo_url": "$URL", "snapshot": "$FULL_SHA", "snapshot_date": "$SNAP_DATE",
-           "window_end": "$END_SHA", "window_end_date": "$END_DATE", "later_commits": $LATER,
-           "files": $(git -C "$W/blind" ls-files | wc -l)}, open(sys.argv[1], "w"), indent=2)
+out, url, snap, snap_date, end, end_date, later, files = sys.argv[1:9]
+json.dump({"repo_url": url, "snapshot": snap, "snapshot_date": snap_date, "window_end": end,
+           "window_end_date": end_date, "later_commits": int(later), "files": int(files)},
+          open(out, "w"), indent=2)
 PY
 echo "workspace $W"
 echo "  blind clone at ${FULL_SHA:0:10} ($SNAP_DATE), $(git -C "$W/blind" ls-files | wc -l) files, no later commit"
