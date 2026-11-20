@@ -79,7 +79,9 @@ Follow these in order. Stop and tell the user if any step fails.
    "$SEAMREG/bench/snapshot.sh" <repo url> <snapshot commit> "$WORK"
    ```
 4. **Follow the kind's README** from here. While a blind session runs, `session.sh` makes the other
-   folders in `$WORK` unreadable, and puts them back when it ends. If it is killed hard (`kill -9`), they
+   folders in `$WORK` unreadable, and puts them back when it ends. That makes a stray read fail loudly,
+   but it is not a security boundary: the session runs as you. The scan is the check, and a container is
+   the boundary (see Safety). If it is killed hard (`kill -9`), they
    stay locked until you run the same session again, which unlocks them first. For `detection`: build the key, run blind, scan, grade.
 5. **Check the blindness scan.** Read every hit. A hit can be harmless (a path named in a reply), but a
    read of the key, the full clone or the miss library makes the run invalid. Say which it is.

@@ -29,7 +29,9 @@ NET = re.compile(r"(?:^|(?<=[\s'\"`{;&|(]))(curl|wget|gh|nc|ssh|scp)\s+(?![=:(,)
                  r"|urllib|requests\.(get|post|put|head)|http\.client|socket\.|\bfetch\(|https?://")
 # A path that climbs out of where the session works, such as ../key/key.md or blind/../full. Every one
 # needs a look, because the session starts in the blind clone, next to the folders it must not read.
-CLIMB = re.compile(r"(?:^|[\s'\"=:/(])\.\.(?:/|[\s'\")]|$)")
+CLIMB = re.compile(r"(?<![\w.~])\.\.(?![\w.])")
+# Changing file modes, owners or attributes could undo the lock session.sh puts on the other folders.
+PERMS = re.compile(r"(?:^|(?<=[\s'\"`{;&|(]))(chmod|chown|chgrp|setfacl|chattr|icacls|takeown)\s")
 ALLOWED_IN_WORK = (r"blind(?:/|\b)", r"tool/skills", r"tool/agents", r"tool(?![/\w.-])")
 
 
@@ -95,7 +97,7 @@ def scan(files, forbid, show=False):
                     net.append(f"{c['name']}: {text[:160]}")
                 # Check the raw values too: in the JSON text a newline after .. reads as \n.
                 raw = "\n".join(str(v) for v in (c.get("input") or {}).values() if isinstance(v, str))
-                if forbid.search(text) or CLIMB.search(text) or CLIMB.search(raw):
+                if forbid.search(text) or CLIMB.search(raw) or PERMS.search(raw):
                     hits.append((f"{c.get('name')}: {text[:200]}",
                                  seen.get(c.get("id"), "(no result)")[:400].replace("\n", " | ") if show else None))
                 if c.get("name") in ("Bash", "PowerShell"):

@@ -61,8 +61,10 @@ except Exception: sys.exit(0)
 sys.exit(0 if d.get('is_error') or d.get('subtype') != 'success' else 1)" "$1" 2>/dev/null; }
 
 # While the blind session runs, every other entry in WORKDIR (the full clone, the key, other sessions)
-# is made unreadable, so the session cannot read it even by a relative path such as ../key. The modes
-# are saved first and put back when this script ends, however it ends.
+# is made unreadable, so a stray read, even by a relative path such as ../key, fails loudly. This is not
+# a security boundary: the session runs as you and could change the modes back. The transcript scan is
+# the check (it flags chmod and the like), and a container is the boundary. The modes are saved first and
+# put back when this script ends, however it ends.
 HIDDEN=$R/hidden-modes.json
 hide() {
     python3 -I - "$W" "$NAME" "$HIDDEN" <<'PY'
@@ -80,11 +82,21 @@ PY
 }
 unhide() {
     [ -f "$HIDDEN" ] || return 0
-    python3 -I - "$HIDDEN" <<'PY'
+    # The modes file sits where the session can write, so trust only what hide() could have written:
+    # direct children of WORKDIR other than blind, tool and this session, plain permission bits only.
+    python3 -I - "$HIDDEN" "$W" "$NAME" <<'PY'
 import json, os, sys
-for p, m in json.load(open(sys.argv[1])).items():
-    if os.path.exists(p): os.chmod(p, m)
-os.remove(sys.argv[1])
+path, w, name = sys.argv[1:4]
+try:
+    modes = json.load(open(path))
+except Exception:
+    modes = {}
+for p, m in (modes.items() if isinstance(modes, dict) else []):
+    if not isinstance(m, int) or os.path.dirname(p) != w or os.path.basename(p) in ("blind", "tool", name):
+        continue
+    if os.path.exists(p) and not os.path.islink(p):
+        os.chmod(p, m & 0o777)
+os.remove(path)
 PY
 }
 unhide            # a run that crashed may have left them hidden
