@@ -88,13 +88,43 @@ def test_stop_blocks_once_when_a_copy_is_left_behind(repo):
     out = stop(repo)
     assert out["decision"] == "block"
     assert "not changed: web/status.ts" in out["reason"] and "say which and why" in out["reason"]
+    assert "add that seam to seams.json now" in out["reason"]
     assert stop(repo, active=True) is None  # the second stop goes through: no loop
 
 
-def test_stop_is_quiet_when_every_copy_changed_or_nothing_did(repo):
+def test_stop_is_quiet_when_nothing_changed_or_only_the_registry_did(repo):
     assert stop(repo) is None
+    data = json.loads((repo / "seams.json").read_text())
+    data["seams"][0]["title"] = "renamed"
+    (repo / "seams.json").write_text(json.dumps(data))
+    assert stop(repo) is None
+
+
+def test_stop_reminds_once_to_record_copies_when_every_listed_copy_changed(repo):
+    # No copy left behind, but the change may have met an unlisted copy: one reminder, no seam list.
     (repo / "api/status.py").write_text("y\n")
     (repo / "web/status.ts").write_text("y\n")
+    out = stop(repo)
+    assert out["decision"] == "block" and "not changed" not in out["reason"]
+    assert "add that seam to seams.json now" in out["reason"] and "whether you updated the other copy or left it" in out["reason"]
+    assert stop(repo, active=True) is None
+
+
+def test_stop_sees_committed_work_on_a_branch(repo):
+    # An agent that commits before it stops (a pull request) leaves a clean tree.
+    git(repo, "branch", "-M", "main")
+    git(repo, "checkout", "-qb", "feature")
+    (repo / "api/status.py").write_text("y\n")
+    git(repo, "commit", "-qam", "change one copy")
+    out = stop(repo)
+    assert "not changed: web/status.ts" in out["reason"]
+    assert "seams scan --since main --new" in out["reason"]
+
+
+def test_stop_on_the_default_branch_ignores_old_commits(repo):
+    git(repo, "branch", "-M", "main")
+    (repo / "api/status.py").write_text("y\n")
+    git(repo, "commit", "-qam", "an old commit on main")
     assert stop(repo) is None
 
 
@@ -125,3 +155,32 @@ def test_the_settings_snippet_wires_both_hooks():
     pre = cfg["hooks"]["PreToolUse"][0]
     assert "Bash" in pre["matcher"].split("|") and "Edit" in pre["matcher"].split("|")
     assert "--stop-hook" in cfg["hooks"]["Stop"][0]["hooks"][0]["command"]
+
+
+def test_stop_never_puts_an_odd_ref_name_in_a_command(repo):
+    git(repo, "branch", "-M", "main")
+    git(repo, "update-ref", "refs/remotes/origin/x$(touch_pwned)", "HEAD")
+    git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/x$(touch_pwned)")
+    git(repo, "checkout", "-qb", "feature")
+    (repo / "api/status.py").write_text("y\n")
+    git(repo, "commit", "-qam", "change")
+    out = stop(repo)
+    assert "pwned" not in out["reason"] and "seams scan --since <base branch> --new" in out["reason"]
+
+
+def test_stop_speaks_up_when_an_edit_broke_the_registry(repo):
+    data = json.loads((repo / "seams.json").read_text())
+    data["seams"][0]["kind"] = "rule"
+    (repo / "seams.json").write_text(json.dumps(data))
+    out = stop(repo)
+    assert out["decision"] == "block" and "no longer passes its own check" in out["reason"] and "convention" in out["reason"]
+    assert stop(repo, active=True) is None
+
+
+def test_stop_names_stale_notes(repo):
+    data = json.loads((repo / "seams.json").read_text())
+    data["notes"] = ["rules"]
+    (repo / "seams.json").write_text(json.dumps(data))
+    (repo / "api/status.py").write_text("y\n")
+    out = stop(repo)
+    assert "--notes" in out["reason"]

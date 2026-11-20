@@ -29,7 +29,8 @@ import time
 from pathlib import Path
 
 from seams import check
-from seams.scan import cochange, conventions, dupblocks, formats, litsets, markers, names, packaging, siblings, ties, twins
+from seams.scan import (cochange, conventions, dataflow, dupblocks, formats, keywriters, litsets, markers, names, packaging,
+                        sharedids, siblings, ties, twins)
 from seams.scan.inventory import Inventory, is_test, kind_of
 
 LEADS_VERSION = 1
@@ -63,7 +64,7 @@ def write_baseline(path, fingerprints):
                      "and `seams merge --apply`. A re-scan treats these as old.",
             "leads": sorted(fingerprints)}
     Path(path).write_text(json.dumps(body, indent=0) + "\n", encoding="utf-8")
-DETECTORS = [markers, dupblocks, names, litsets, conventions, siblings, twins, formats, packaging, cochange, ties]
+DETECTORS = [markers, dupblocks, names, litsets, conventions, siblings, twins, formats, packaging, sharedids, keywriters, dataflow, cochange, ties]
 KINDS = {  # kind: what it is, for the report headings. Order is report order.
     "marker": "Comments that say two places must agree",
     "literal-set": "The same list of names in two files",
@@ -77,6 +78,10 @@ KINDS = {  # kind: what it is, for the report headings. Order is report order.
     "same-name": "The same function or class name in two or more areas",
     "env-name": "The same env var in two or more areas",
     "same-file": "The same file name in two or more areas",
+    "shared-ids": "Code in two folders that uses the same rare names (fields, columns, settings)",
+    "key-writers": "Every file that writes the same key: they must build the same shape",
+    "flow": "A rare key one file writes and another file reads",
+    "access": "Two files that decide who may do what, with the same rare names",
     "co-change": "Files in different folders that keep changing in the same commits",
     "tie-candidate": "Tests that may already tie copies",
 }

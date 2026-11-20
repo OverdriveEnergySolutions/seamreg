@@ -270,6 +270,35 @@ def cmd_apply(args):
     return 0
 
 
+def cmd_rerate(args):
+    from seams import rerate
+
+    out = _out(args)
+    reg = Path(args.registry) if args.registry else Path(args.root) / checker.REGISTRY
+    if not reg.exists():
+        print(f"seams: no {reg}.", file=sys.stderr)
+        return 2
+    try:
+        if args.collect:
+            lines, counts, errors = rerate.collect(reg, out)
+            report = out / "rerate" / "rerate-report.md"
+            report.write_text("# Risk re-rating report\n\n" + ("\n".join(lines) or "No risk changed.") + "\n",
+                              encoding="utf-8")
+            if errors:
+                print(f"seams: the result does not match the schema; {reg} is unchanged.", file=sys.stderr)
+                return 1
+            print(f"{counts['rated']} seams rated from {counts['files']} file(s): {counts['up']} raised, "
+                  f"{counts['down']} lowered, written to {reg}. Report: {report}")
+            return 0
+        paths = rerate.write_packets(reg, args.root, out, args.batch)
+    except ValueError as e:
+        print(f"seams: {e}", file=sys.stderr)
+        return 2
+    print(f"{len(paths)} re-rating packet(s) in {out / 'rerate' / 'packets'}. Start one seam-risk-rater agent per "
+          "packet, then run `seams rerate --collect`.")
+    return 0
+
+
 def cmd_verify(args):
     from seams import verify
 
@@ -448,17 +477,18 @@ def cmd_split(args):
         print(f"seams: {e}", file=sys.stderr)
         return 2
     known = None
-    if args.gap and args.focus:
-        print("seams: --gap and --focus are separate passes. Pick one.", file=sys.stderr)
+    if sum(map(bool, (args.gap, args.focus, args.lead_check))) > 1:
+        print("seams: --gap, --focus and --lead-check are separate passes. Pick one.", file=sys.stderr)
         return 2
-    if args.gap or args.focus:
+    if args.gap or args.focus or args.lead_check:
         reg = Path(args.root) / checker.REGISTRY
         try:
             data = checker.load(reg)
             if checker.validate_errors(data):
                 raise ValueError("it does not match the schema")
         except FileNotFoundError:
-            print(f"seams: --{'focus' if args.focus else 'gap'} needs a {checker.REGISTRY} from a first review.",
+            flag = "focus" if args.focus else "lead-check" if args.lead_check else "gap"
+            print(f"seams: --{flag} needs a {checker.REGISTRY} from a first review.",
                   file=sys.stderr)
             return 2
         except ValueError as e:
@@ -469,6 +499,8 @@ def cmd_split(args):
                   file=sys.stderr)
             return 2
         known = data["seams"]
+    if args.lead_check:
+        return _split_lead_check(args, doc, out, known)
     try:
         bins = split.write(doc, args.root, out, args.max_lines, args.new_only, args.cross_area_only, known,
                            args.focus)
@@ -491,6 +523,20 @@ def cmd_split(args):
     for b in bins:
         print(f"  {b['name']:40} {b['lines']:8} lines {len(b['leads']):6} leads")
     print(f"Plan and cost estimate: {out / 'plan.md'}. Start one seam-reviewer agent per packet.")
+    return 0
+
+
+def _split_lead_check(args, doc, out, known):
+    from seams import leadcheck, passes
+    bins = leadcheck.write(doc, args.root, out, known, keep_agreeing=args.keep_agreeing)
+    if not bins:
+        print("seams: every strong lead is covered by a recorded seam. Nothing to check.")
+        return 0
+    n = sum(len(b["leads"]) for b in bins)
+    passes.record_pass(out, "lead-check", len(bins), n, {"seams": known})
+    print(f"{len(bins)} lead check packets in {out / 'packets'}, {n} leads, about "
+          f"${leadcheck.COST_PER_LEAD * n:.0f} with Sonnet. Plan: {out / 'plan.md'}.")
+    print("Start one seam-lead-checker agent per packet, then run `seams merge`.")
     return 0
 
 
@@ -572,6 +618,11 @@ def build_parser():
                    help="drop leads inside one area; reviewers check leads, not whole areas")
     p.add_argument("--gap", action="store_true",
                    help="a second full pass: reviewers get the seams seams.json records and hunt for the ones it misses")
+    p.add_argument("--lead-check", action="store_true",
+                   help="after a first review: cheap agents judge every strong lead no recorded seam covers, "
+                        "and record the seams whose copies differ or share a mistake")
+    p.add_argument("--keep-agreeing", action="store_true",
+                   help="with --lead-check: also record seams whose copies agree today (more seams, more noise)")
     p.add_argument("--focus", choices=sorted(split_focus_names()),
                    help="a focused pass after a first review: one reviewer hunts one kind of seam across the repo "
                         "(twins: two implementations of one behavior)")
@@ -608,6 +659,14 @@ def build_parser():
     p.add_argument("--seed", type=int, default=0, help="seed for --sample, so a pick can be repeated")
     p.add_argument("--collect", action="store_true", help="write the checkers' results into the registry")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("rerate", help="a stronger model sets each recorded seam's risk again, one agent per packet")
+    p.add_argument("--root", default=".")
+    p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
+    p.add_argument("--registry", help="registry to read and update (default: <root>/seams.json)")
+    p.add_argument("--batch", type=int, default=30, help="seams per packet (default 30)")
+    p.add_argument("--collect", action="store_true", help="write the raters' risks into the registry")
+    p.set_defaults(func=cmd_rerate)
 
     p = sub.add_parser("mcp", help="run the registry lookups as an MCP server on stdio, for any agent")
     p.add_argument("--root", default=".")

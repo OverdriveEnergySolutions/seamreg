@@ -16,7 +16,7 @@ Search with Grep and Glob, or in the shell with `rg`, `grep`, `git grep` or `git
 2. Open every copy. In each one, find the part that holds the knowledge, and write down its elements:
    - for a list or a map: every item and every key,
    - for a rule or a format: every case, operator, field, unit and default,
-   - for a payload: every field name, its type and who fills it,
+   - for a payload, a type or a schema: every field name, its type and allowed values, and who fills it. Compare the types, not only the names,
    - for code that two places run: what each one does with a missing, empty, wrong-case or wrong-type value, and with the edge cases of its input (the longest value and one more, letters outside ASCII, separators, numbered and bulleted list items). For a pattern, copy it into a scratch script and run it on those inputs,
    - for a stored value (a date, a status, a JSON field): every code path that writes it, the rarely run ones too, and the format each one writes,
    - for a description (a README line, a help text, a doc): every claim it makes, line by line: each name, flag, step, number and path. Where it gives a list, such as steps in order or the users of a thing, compare it with the full list in the source: an item the description leaves out is drift too.

@@ -1,6 +1,6 @@
 ---
 name: seams
-description: Use a repo's seams registry (seams.json), the list of knowledge kept in two or more files that must agree. Before you plan or edit, ask it which other files hold copies of what you will change. Before you finish, check which copies the change left alone. When you fix drift between copies, add a tie. Use when the repo has seams.json, when a change touches a shared list, map, rule or payload shape, or when a bug came from one copy changing alone. To build a registry with a full review, use the seams-review skill.
+description: Use a repo's seams registry (seams.json), the list of knowledge kept in two or more files that must agree. Before you plan or edit, ask it which other files hold copies of what you will change. Before you finish, check which copies the change left alone. When you fix drift between copies, fix every copy first; a tie is a follow-up. Use when the repo has seams.json, when a change touches a shared list, map, rule or payload shape, or when a bug came from one copy changing alone. To build a registry with a full review, use the seams-review skill.
 ---
 
 # Seams
@@ -36,7 +36,8 @@ Use `python3 scripts/seams_check.py` (the copy `seams init` put in the repo) or 
 
 1. **Before you plan.** If you do not know the files yet, run `--about "<topic>"`. Once you know the files you expect to touch, run `--changed <files>`. Put every copy it names into the plan, or say in the plan why that copy must differ. A seam with known drift says so: decide which side is right before you edit either.
 2. **Before you finish.** Run `--staged`, or `--diff <base branch>` on a branch. If it names a copy you left alone, update that copy or say why it must differ.
-3. **When you fix drift between copies,** add a tie in the same change: a test that fails when the copies differ. Then list the tie in the seam's entry, or add the seam to `seams.json` if it is not there. To have an agent draft it, run `seams tie <id>`, start one `seam-tie-writer` agent on the packet it names, then run `seams tie --collect`. Read the test it wrote like any other code before you commit it.
+3. **When you fix drift between copies,** fix every stale copy first. Never leave a copy stale because it has no tie. A tie (a test that fails when the copies differ) is a good follow-up: add one in the same change if it is cheap, or suggest it to the user. Then list the tie in the seam's entry, or add the seam to `seams.json` if it is not there. To have an agent draft it, run `seams tie <id>`, start one `seam-tie-writer` agent on the packet it names, then run `seams tie --collect`. Read the test it wrote like any other code before you commit it.
+   **When you find a copy no seam lists,** add the seam to `seams.json` in this change, even if you leave that copy alone and only mention it in your reply. The next change reads the registry, not your reply.
    If no seam listed those copies, the registry missed them. Run `seams report-miss --changed <file> --missed <file> --rule "<what had to agree>"`, and give the shape in general words with `--summary`. Tell the user what it printed: shared with the seamreg project, it helps the tool learn that shape. For a private repo the shared text holds only the shape, never a path, a commit or code.
 4. **Before you open a pull request,** run `seams scan --since <base branch> --new`. It uses no agents. Any lead it lists may be a seam this branch created. Check each one, and add the real ones to `seams.json` in the same pull request.
 

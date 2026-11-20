@@ -20,6 +20,9 @@ CODE_EXT = {
     ".java", ".kt", ".kts", ".scala", ".rb", ".php", ".cs", ".swift", ".c", ".h", ".cc",
     ".cpp", ".hpp", ".m", ".dart", ".ex", ".exs", ".lua", ".r", ".pl", ".sh", ".bash",
     ".zsh", ".sql", ".html", ".j2", ".jinja", ".tpl",
+    # server-side templates: they re-state rules (a sign-up link behind a setting) and user-facing limits
+    ".heex", ".eex", ".leex", ".erb", ".haml", ".slim", ".hbs", ".handlebars", ".mustache", ".njk",
+    ".liquid", ".twig", ".ejs", ".pug", ".cshtml", ".razor", ".astro",
 }
 CONFIG_EXT = {".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".env", ".properties",
               ".tf", ".hcl", ".star", ".json", ".jsonc"}

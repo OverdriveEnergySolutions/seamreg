@@ -26,7 +26,7 @@ It excludes:
 - anything only in historical docs (plans, brainstorms, old reviews),
 - tests that duplicate other tests. A test that checks two copies against each other is a tie, not a seam.
 - generated code. A generator with one input is a single source.
-- knowledge repeated inside one file, such as one list written once per section of a config file. A copy is a file, so the registry cannot hold it.
+- knowledge repeated inside one file, such as one list written once per section of a config file. A copy is a file, so the registry cannot hold it. But when two parts of one file disagree (a value one section declares and another section uses differently), record that as a bug entry (see Output).
 
 Record **one seam per piece of knowledge, not per file pair**. Group every copy of the same knowledge into one seam.
 
@@ -55,12 +55,16 @@ Claims about ties need evidence:
    - docs that state a code fact an agent acts on: CLAUDE.md files, architecture docs, catalogs and their generators,
    - a short description of something defined elsewhere: a README or index line for each module, skill or command, a router or help text that says what each one does, a CHANGELOG or ADR line that says one part uses another. Record one seam for each kind of description, such as "README descriptions match each skill", with the description files and the described files as copies. Then compare each description with what its thing does today, item by item,
    - a guard or a test that checks a file by path, and whether that path still holds the thing it checks.
+   - a rule the repo wraps in one function or module (a quota, an access check, a feature flag), and every other place that decides the same question without calling it: code that reads the raw field or config key, a second handler for the same action, a template that re-derives the rule. Search for the raw field and config key names, not only the function name. Each bypass is a copy of the rule; one that decides differently is drift,
+   - user-facing text that states a limit, a duration, a price or a count (emails, pages, error messages, help text), against the code that enforces it. Search for numbers written in words too ("ten minutes", "a month"), not only digits,
+   - CI and build config, checked against itself and against local tools: each value one part declares and another part uses (names, ports, paths, versions), and the steps a local script runs against the steps the CI job runs.
    - a family that the repo builds one way: the subclasses of one base class, the files in one folder that do the same job, one file per app or plugin. Find the rule its members follow, from the repo's own checklist (a doc such as "adding a provider", a CONTRIBUTING section, a pull request template) or from what most members do. A `convention` lead names a family, its pattern and the members that break it. Read the checklist docs in your areas even when no lead points at them: each step that names a file is a copy of the rule.
 3. For each candidate, open every copy and decide: seam or not.
 4. For a seam, check whether the copies agree today. If they differ in a way that looks unintended, record it in `drift`, with path:line on each side.
    - For a description seam, list every claim each description makes: each name, flag, step, number and path. Check each one against the thing it describes. One stale line among twenty is still drift, and it is the line a quick read skips.
    - A description can be true and still drift by what it leaves out. Where it gives a list, compare the list with the full one in the source: a sequence of steps ("parse → validate → save") with one of the source's steps missing, or the users of a thing ("used by the API and the worker") when a third service uses it too. Record a missing item as drift. A summary that leaves out detail but gives no list is not drift.
    - When the code branches by backend, platform or version (a SQLite path and a MariaDB path, say), check every branch. Drift often hides in the branch the tests do not run.
+   - Compare at full depth, not only names. For a payload, a type or a schema, compare each field's type and allowed values on both sides: a client type that allows fewer or more values than the server accepts is drift. For one feature served by two backends or two data sources (two databases, a cache and its store, two providers), list every option each side supports and record an option one side accepts but cannot serve.
    - When a difference is temporary or explained, such as a version bumped ahead of a pending release, say so in the drift text, with the evidence.
    - For a convention seam, check every member of the family, not a sample. List the members (a script helps), check each one against the rule, and name each member that breaks it with path:line. A member with a reason to differ, such as a provider that cannot refund, is not drift: say why in `intentional_differences`.
 5. Rank the risk:

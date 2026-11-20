@@ -51,7 +51,7 @@ import stat
 import sys
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 REGISTRY = "seams.json"
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__",
@@ -492,8 +492,8 @@ def describe(seam, hit, rest, editing=False, label=None):
         name = f" ({tie['test']})" if "test" in tie else ""
         lines.append(f"  tie: {tie['path']}{name}, covers {tie['covers']}")
     if not fully_tied(seam):
-        lines.append("  no full tie: nothing fails if these copies drift. Update every copy, "
-                     "and add a tie with the fix.")
+        lines.append("  no full tie: nothing fails if these copies drift. Update every copy. "
+                     "A tie is welcome but never a reason to leave a copy stale.")
     return "\n".join(lines)
 
 
@@ -557,7 +557,8 @@ def markdown_report(partial, n_changed, rerun):
     head = [COMMENT_MARKER, f"### seams: {len(partial)} seam(s) with a copy not changed", "",
             "This pull request changes one copy of each seam below and not the others. "
             "Read each copy not changed. If it still agrees, no action is needed. "
-            "If you fix a drift, add a tie: a test that fails when the copies disagree. "
+            "If a copy is stale, fix it in this change. A tie (a test that fails when the copies disagree) is "
+            "a good follow-up, not a condition for the fix. "
             f"{untied} of these seams have no full tie.", ""]
     body, shown = [], 0
     for f in order:
@@ -731,20 +732,46 @@ def run_stop_hook(stdin, root=None):
         if root is None:
             return None
         data = load(root / REGISTRY)
-        if validate_errors(data):
-            return None
-        raw = drop_note_only(root, _worktree_changes(root), "HEAD", new_from_index=False)
+        bad = validate_errors(data)
+        if bad:  # an edit broke the registry: say so once, since every later lookup is now silent
+            return {"decision": "block", "reason": "Before you finish: seams.json no longer passes its own check, so "
+                    "the hooks and notes cannot read it. Fix these, run `python3 scripts/seams_check.py --notes`, then "
+                    "`python3 scripts/seams_check.py` until it says ok:\n" + "\n".join(f"- {e}" for e in bad[:10])
+                    + f"\nA seam's kind is one of: {', '.join(KINDS)}."}
+        base, base_ref = _branch_base(root) or ("HEAD", "<base branch>")
+        raw = drop_note_only(root, _worktree_changes(root, base), base, new_from_index=False)
         changed = sorted({r for r in (relative(f, root) for f in raw) if r})
         partial = [(s, h, r) for s, h, r in lookup(data, changed) if r]
     except Exception:
         return None
-    if not partial:
+    own = [c for c in changed if c != REGISTRY and not c.startswith(NOTES_DIR + "/")]
+    if not own:
         return None
-    text = ["Before you finish: your changes touch a copy of a seam (knowledge kept in more than one file that "
-            "must agree) and leave its other copies unchanged. For each seam below, read the copies not changed. "
-            "Update each one that no longer agrees. If one must differ, say which and why in your final reply."]
-    text += [describe(*f) for f in partial]
+    text = []
+    if partial:
+        text += ["Before you finish: your changes touch a copy of a seam (knowledge kept in more than one file that "
+                 "must agree) and leave its other copies unchanged. For each seam below, read the copies not changed. "
+                 "Update each one that no longer agrees. If one must differ, say which and why in your final reply."]
+        text += [describe(*f) for f in partial]
+    # The ref name can come from a remote (origin/HEAD) and goes into a command the agent may run.
+    safe = base_ref if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}", base_ref) else "<base branch>"
+    text += [RECORD_REMINDER.format(base=safe)]
+    errors = check(data, root)
+    if errors:  # notes left stale by an edit to seams.json, or a copy that no longer exists
+        text += ["seams.json or its notes are out of date: run `python3 scripts/seams_check.py --notes`, then "
+                 "`python3 scripts/seams_check.py`, and fix what it reports:\n" + "\n".join(f"- {e}" for e in errors[:10])]
     return {"decision": "block", "reason": "\n\n".join(text)}
+
+
+RECORD_REMINDER = (
+    "Before you finish, record what this change taught you about copies. If you found knowledge that another "
+    "file must match and no seam in seams.json lists it (a list, a schema, a route and its docs, a limit and the "
+    "text that states it), add that seam to seams.json now, with every copy you know of. Do this whether you "
+    "updated the other copy or left it: a copy you named and left is the one the next change will miss. "
+    "After you edit seams.json, run `python3 scripts/seams_check.py --notes` and then `python3 scripts/seams_check.py`. "
+    "If the `seams` command is installed and this change goes to a pull request, also run "
+    "`seams scan --since {base} --new` and add the real seams among its leads. If you found nothing new, "
+    "finish as you were.")
 
 
 # --- notes: put each seam where an agent reads it ---------------------------
@@ -1106,12 +1133,37 @@ def _mcp_registry(root):
     return data
 
 
-def _worktree_changes(root):
-    tracked = _git(root, "diff", "--name-only", "--relative", "-z", "HEAD")
+def _worktree_changes(root, since="HEAD"):
+    tracked = _git(root, "diff", "--name-only", "--relative", "-z", since)
     if tracked.returncode != 0:
-        raise RuntimeError(tracked.stderr.strip() or "git diff HEAD failed")
+        raise RuntimeError(tracked.stderr.strip() or f"git diff {since} failed")
     new = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
     return [l for l in (tracked.stdout + new.stdout).split("\0") if l]
+
+
+DEFAULT_BRANCHES = ("main", "master", "trunk", "develop", "dev")
+
+
+def _branch_base(root):
+    """Where this branch's own work starts: the merge-base with the default branch, when HEAD is ahead
+    of it. An agent that commits before it finishes (a pull request) leaves no uncommitted change, so
+    the Stop hook must also see the branch's commits. None on the default branch with nothing ahead."""
+    head = _git(root, "rev-parse", "HEAD")
+    if head.returncode != 0:
+        return None
+    refs = []
+    sym = _git(root, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD")
+    if sym.returncode == 0 and sym.stdout.strip():
+        refs.append(sym.stdout.strip())
+    refs += [b for b in DEFAULT_BRANCHES] + [f"origin/{b}" for b in DEFAULT_BRANCHES]
+    for ref in refs:
+        if _git(root, "rev-parse", "-q", "--verify", f"{ref}^{{commit}}").returncode != 0:
+            continue
+        mb = _git(root, "merge-base", ref, "HEAD")
+        if mb.returncode == 0 and mb.stdout.strip() and mb.stdout.strip() != head.stdout.strip():
+            return mb.stdout.strip(), ref
+        return None  # HEAD is on (or behind) the default branch: no branch work beyond the worktree
+    return None
 
 
 def mcp_call(root, name, arguments):
@@ -1375,8 +1427,8 @@ def main(argv=None):
     for e in errors:
         print(e)
     if errors:
-        print(f"seams: {len(errors)} problem(s). Fix the registry or the code, "
-              "and add a tie for any drift you fix.")
+        print(f"seams: {len(errors)} problem(s). Fix the registry or the code. "
+              "A tie for a drift you fix is welcome, not required.")
         return 1
     seams = data["seams"]
     copies = sum(len(s["copies"]) for s in seams)

@@ -52,7 +52,7 @@ def load_ledger(out):
 
 
 def record_pass(out, kind, packets, leads, registry):
-    """Add one pass to the ledger. `kind`: first, gap, lead-only or focus:<name>."""
+    """Add one pass to the ledger. `kind`: first, gap, lead-only, lead-check or focus:<name>."""
     doc = load_ledger(out)
     doc["passes"].append({"kind": kind, "started": _now(), "packets": packets, "leads": leads,
                           "before": picture(registry)})
@@ -268,7 +268,7 @@ def _entry(s):
             f"  Differs: {_clip(s['drift']['text'])}",
             f"  If left: {_clip(s['consequence'], 200)}",
             f"  Copies: {copies}",
-            f"  Tie: {tie_line}. Fix the drift and add a tie in the same change (`seams tie {s['id']}`)."]
+            f"  Tie: {tie_line}. Fix the drift; a tie can follow (`seams tie {s['id']}`)."]
 
 
 def triage_text(data, top=10):

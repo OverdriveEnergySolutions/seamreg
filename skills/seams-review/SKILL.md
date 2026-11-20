@@ -52,6 +52,25 @@ This workflow spends real money: one reviewer agent per packet, and one drift ch
 
 `seams next` ranks the candidate next steps, each with its reason and cost: settle a merge, the drift check, the next gap pass (or the stopping rule), focused passes whose leads exist, a second opinion on drift found by reading, triage and ties. Each `seams split` adds the pass to `.seams-scan/passes.json`, so `seams next` also shows what every earlier pass added. Run it after each merge and show the user its list. `seams triage` lists the drift worth fixing first: confirmed drift ahead of drift found by reading, then by risk. A merge prints a short form of it.
 
+## Model choice, and re-rating risk
+
+Measured on two public repos with known drifts: reviewers on Sonnet 5.5 found the same known drifts as on Opus 5.5 and recorded slightly more of the known seams, for about 60% of the cost. They rated far fewer seams high (2 against 7, and 2 against 17), and wrote more small wrong details inside true claims. So when the user wants the cheaper review, run the reviewers on Sonnet, then re-rate risk with a stronger model, because risk decides what the hooks, notes and drift check put first:
+
+1. After step 7, run `seams rerate`. It writes packets of up to 30 recorded seams each.
+2. Start one `seam-risk-rater` agent per packet. It runs on Opus. Give each one only its packet path.
+3. Run `seams rerate --collect`. It writes the new risks into `seams.json` and lists every change in `.seams-scan/rerate/rerate-report.md`. Show the user the seams raised to high.
+
+## Lead check: right after the first review
+
+A full reviewer gets hundreds of leads with its areas and acts on few of them. The lead check gives every strong lead that no recorded seam covers to a cheap agent, in batches of 25, with one question per lead: do these places hold one piece of knowledge, and do the copies agree? It records a seam only when the copies differ or share a mistake. Measured on three public repos with known drifts, with Sonnet 5.5: it found 3 known drifts the first reviews had missed, for $27 across all three, and none of 30 graded claims was wholly false. So offer it after step 7, before any gap pass.
+
+1. Run `seams split --lead-check`. It needs `seams.json`, and moves the earlier passes' review files into `done/` folders, as a gap pass does.
+2. Show the user the lead count and the cost from `plan.md`, and get a yes. Start one packet first and check its cost.
+3. Start one `seam-lead-checker` agent per packet. It runs on Sonnet unless the user picks another model. Give each one only its packet path.
+4. Run `seams merge` and settle the report as in step 5. Then run the drift check on the new high-risk seams as in step 5 of the gap passes, and apply.
+
+**Without a full review.** When the user will not pay for a review, the lead check is a cheaper start: run `seams split --lead-check --keep-agreeing` on a repo with an empty `seams.json`. It also records seams whose copies agree today, but only from the lead kinds where those proved real (flow, key-writers, twin, access, shared-ids). Measured on two public repos with Sonnet 5.5 agents making real past changes: agents kept every copy in step in 16 of 41 runs with no registry, 25 of 41 with this registry ($27 for both repos), and 32 of 41 with a reviewed one. So it closes about half the gap, and a review still does better. Tell the user both numbers.
+
 ## Gap passes: plan for three passes
 
 One review finds about half of a repo's seams, and a second blind review spends much of its effort finding the same ones again. A gap pass hunts only for what the earlier passes missed. Measured on four public repos with known drifts, the share caught rose from 33% after a first review to 44% after one gap pass and 52% after two. The second gap pass still caught a known drift on two of the four, at about three quarters of a first review's cost. So after step 7, tell the user that a first review plus two gap passes is the measured starting point, and offer the first gap pass. Stop early when a gap pass adds no new high-risk seam and no new drift.
