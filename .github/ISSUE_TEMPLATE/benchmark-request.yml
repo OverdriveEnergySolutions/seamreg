@@ -1,0 +1,44 @@
+name: Benchmark request
+description: Ask the maintainers to benchmark seamreg on a repo you choose.
+title: "Benchmark request: "
+labels: ["benchmark-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We pick requests by how much they would teach us: a new stack, a new kind of repo, or a claim worth
+        testing. To run one yourself instead, see bench/README.md.
+  - type: input
+    id: repo
+    attributes:
+      label: Repo
+      description: A public repo URL.
+      placeholder: https://github.com/owner/repo
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of benchmark
+      options:
+        - detection (does seamreg find the seams and drift the maintainers fixed later?)
+        - something else (say what below)
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this repo
+      description: What would a result here show that the published results do not? For example a stack, a size, or a kind of seam you think seamreg misses.
+    validations:
+      required: true
+  - type: input
+    id: snapshot
+    attributes:
+      label: Snapshot commit (optional)
+      description: An older commit to run on. Leave empty and we will pick one with many later fixes.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Known drifts you have seen, parts of the repo to watch, or a reason to pick a model.

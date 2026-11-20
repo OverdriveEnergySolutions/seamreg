@@ -54,7 +54,7 @@ This workflow spends real money: one reviewer agent per packet, and one drift ch
 
 ## Model choice, and re-rating risk
 
-Measured on two public repos with known drifts: reviewers on Sonnet 5.5 found the same known drifts as on Opus 5.5 and recorded slightly more of the known seams, for about 60% of the cost. They rated far fewer seams high (2 against 7, and 2 against 17), and wrote more small wrong details inside true claims. So when the user wants the cheaper review, run the reviewers on Sonnet, then re-rate risk with a stronger model, because risk decides what the hooks, notes and drift check put first:
+Measured on two public repos with known drifts: reviewers on Sonnet 5.5 found as many known drifts as on Opus 5.5, though not the same ones, and recorded slightly more of the known seams, for about 60% of the cost. They rated far fewer seams high (2 against 7, and 2 against 17), and wrote more small wrong details inside true claims. So when the user wants the cheaper review, run the reviewers on Sonnet, then re-rate risk with a stronger model, because risk decides what the hooks, notes and drift check put first:
 
 1. After step 7, run `seams rerate`. It writes packets of up to 30 recorded seams each.
 2. Start one `seam-risk-rater` agent per packet. It runs on Opus. Give each one only its packet path.

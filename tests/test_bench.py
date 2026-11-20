@@ -1,0 +1,78 @@
+"""The benchmark harness: the blindness scan, the result file and the statistics table."""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+BENCH = Path(__file__).resolve().parents[1] / "bench"
+sys.path.insert(0, str(BENCH))
+
+import blindscan  # noqa: E402
+import result  # noqa: E402
+import table  # noqa: E402
+
+
+def test_the_scan_allows_the_blind_clone_and_the_tool_and_flags_the_rest():
+    pat = blindscan.forbidden_pattern(Path("/w/ws"), Path("/home/u/seamreg"), "detection")
+    allowed = ["/w/ws/blind/app.py", "uvx --from /w/ws/tool seams scan", "/w/ws/tool/skills/seams/SKILL.md",
+               "/w/ws/tool/agents/seam-reviewer.md", "/w/ws/detection/tmp/x"]
+    flagged = ["/w/ws/full/app.py", "/w/ws/key/key.md", "/w/ws/blindfold/x", "/w/ws/tool/src/seams/check.py",
+               "/w/ws/tool/src/seams/catalog/misses/a.json", "/home/u/seamreg/docs/benchmarks.md",
+               "/home/u/.claude/projects/p/s.jsonl"]
+    assert not [t for t in allowed if pat.search(t)]
+    assert [t for t in flagged if not pat.search(t)] == []
+
+
+def test_the_scan_reads_subagent_transcripts_and_finds_network_calls(tmp_path):
+    proj = tmp_path / "projects" / "-w-ws-blind"
+    sub = proj / "sid1" / "subagents"
+    sub.mkdir(parents=True)
+
+    def call(name, inp):
+        return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name, "input": inp}]}})
+
+    (proj / "sid1.jsonl").write_text(call("Read", {"file_path": "/w/ws/blind/a.py"}) + "\n")
+    (sub / "agent-1.jsonl").write_text(call("Read", {"file_path": "/w/ws/key/key.md"}) + "\n"
+                                       + call("Bash", {"command": "curl https://example.com"}) + "\n")
+    files = blindscan.transcripts("sid1", home=tmp_path)
+    assert len(files) == 2
+    calls, hits, net = blindscan.scan(files, blindscan.forbidden_pattern(Path("/w/ws"), None, "detection"))
+    assert calls == 3 and len(hits) == 1 and "key.md" in hits[0] and len(net) == 1
+
+
+def make_workspace(tmp_path, measures):
+    (tmp_path / "bench.json").write_text(json.dumps({
+        "repo_url": "https://github.com/o/r", "snapshot": "a" * 40, "snapshot_date": "2026-01-01",
+        "window_end": "b" * 40, "window_end_date": "2026-06-01", "later_commits": 400, "files": 900}))
+    s = tmp_path / "detection"
+    (s / "grade").mkdir(parents=True)
+    (s / "summary.json").write_text(json.dumps({
+        "model": "claude-sonnet-5-5", "effort": "max", "tool_commit": "c" * 40, "session_id": "x", "turns": 3,
+        "complete": True, "cost_usd_api_equivalent": 41.5, "seams": 50, "risk": {"high": 5, "medium": 20, "low": 25},
+        "drift_claims": 12}))
+    (s / "blindscan.txt").write_text("detection: 3 transcripts, 812 tool calls, forbidden 0, network 0\n")
+    (s / "grade" / "measures.json").write_text(json.dumps(measures))
+
+
+def test_a_result_holds_the_envelope_and_the_kinds_own_measures(tmp_path):
+    measures = {"key_drifts": {"total": 9, "caught": 3, "partial": 1}, "anything_new": 7}
+    make_workspace(tmp_path, measures)
+    out = result.build(tmp_path, "detection", "detection")
+    assert out["kind"] == "detection" and out["measures"] == measures
+    assert out["blindscan"] == {"tool_calls": 812, "forbidden": 0, "network": 0}
+    assert out["cost_usd_api_equivalent"] == 41.5 and out["registry"]["seams"] == 50
+
+
+def test_the_table_shows_any_kinds_measures_without_changes(tmp_path):
+    make_workspace(tmp_path, {"key_drifts": {"total": 9, "caught": 3, "partial": 1}})
+    one = tmp_path / "results" / "r-aaaaaaaaaa-detection"
+    one.mkdir(parents=True)
+    (one / "result.json").write_text(json.dumps(result.build(tmp_path, "detection", "detection")))
+    other = tmp_path / "results" / "r-aaaaaaaaaa-newkind"
+    other.mkdir()
+    (other / "result.json").write_text(json.dumps(dict(result.build(tmp_path, "detection", "newkind"),
+                                                       measures={"tasks": {"total": 10, "updated": 6}})))
+    text = table.render(table.load(tmp_path / "results"))
+    assert "## detection" in text and "caught 3/9, partial 1/9" in text
+    assert "## newkind" in text and "updated 6/10" in text
