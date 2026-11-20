@@ -22,8 +22,8 @@
   },
   "blindscan": {
     "tool_calls": 739,
-    "forbidden": 5,
-    "network": 0
+    "forbidden": 10,
+    "network": 1
   },
   "measures": {
     "key_seams": {
@@ -54,5 +54,5 @@
     "total": 30.47
   },
   "resumes": 1,
-  "notes": "First run through the harness. The blind session stopped on a usage limit in its review turn and was resumed with RESUME=1 on another login (summary.json predates the resume counter). Blindness hits, all read: a reviewer made and removed an empty scratch folder in WORK and listed its file names; a checker ran ls ~/.cargo (no such folder); two hits are text that names a home path. No read of the key or the full clone. Window: 114 later commits, under the 300 the README calls a good sign. The key, the run and grading predate task.sh, so the key and grading sessions loaded the contributor's own setup. One key seam and its drift row (both missed by the run) are held back from the public key and grading until their fix ships in a vaultwarden release. They still count in the totals."
+  "notes": "First run through the harness. The blind session stopped on a usage limit in its review turn and was resumed with RESUME=1 on another login (summary.json predates the resume counter). Blindness hits, all read: a reviewer made and removed an empty scratch folder in WORK and listed its file names; a checker ran ls ~/.cargo (no such folder); two hits are text that names a home path. No read of the key or the full clone. Window: 114 later commits, under the 300 the README calls a good sign. The key, the run and grading predate task.sh, so the key and grading sessions loaded the contributor's own setup. One key seam and its drift row (both missed by the run) are held back from the public key and grading until their fix ships in a vaultwarden release. They still count in the totals. Rescanned with the stricter 2026-11-20 rules (paths with .., more network forms): the 5 new hits are reads inside the blind clone (../src/db/schema.rs from blind/migrations) and text in a drift description; the 1 network hit is a grep for the text fetch(. None reached the key or the full clone."
 }

@@ -53,7 +53,42 @@ else
 fi
 
 result() { python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('result') or '')" "$1" 2>/dev/null; }
-failed() { python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('is_error') or d.get('subtype')!='success' else 1)" "$1" 2>/dev/null; }
+# A turn failed when its result says so, or when there is no readable result at all.
+failed() { python3 -I -c "
+import json, sys
+try: d = json.load(open(sys.argv[1]))
+except Exception: sys.exit(0)
+sys.exit(0 if d.get('is_error') or d.get('subtype') != 'success' else 1)" "$1" 2>/dev/null; }
+
+# While the blind session runs, every other entry in WORKDIR (the full clone, the key, other sessions)
+# is made unreadable, so the session cannot read it even by a relative path such as ../key. The modes
+# are saved first and put back when this script ends, however it ends.
+HIDDEN=$R/hidden-modes.json
+hide() {
+    python3 -I - "$W" "$NAME" "$HIDDEN" <<'PY'
+import json, os, sys
+w, name, out = sys.argv[1:4]
+modes = json.load(open(out)) if os.path.exists(out) else {}
+for e in sorted(os.listdir(w)):
+    p = os.path.join(w, e)
+    if e in ("blind", "tool", name) or os.path.islink(p):
+        continue
+    modes.setdefault(p, os.stat(p).st_mode & 0o7777)
+    os.chmod(p, 0)
+json.dump(modes, open(out, "w"))
+PY
+}
+unhide() {
+    [ -f "$HIDDEN" ] || return 0
+    python3 -I - "$HIDDEN" <<'PY'
+import json, os, sys
+for p, m in json.load(open(sys.argv[1])).items():
+    if os.path.exists(p): os.chmod(p, m)
+os.remove(sys.argv[1])
+PY
+}
+unhide            # a run that crashed may have left them hidden
+trap unhide EXIT
 turn() {  # turn N MESSAGE [first]
     local how=(--resume "$SID"); [ -n "${3:-}" ] && how=(--session-id "$SID")
     (cd "$B" && TMPDIR="$R/tmp" ENABLE_CLAUDEAI_MCP_SERVERS=false claude -p "$2" "${how[@]}" \
@@ -63,7 +98,13 @@ turn() {  # turn N MESSAGE [first]
     [ -s "$R/turn$1.json" ] && ! failed "$R/turn$1.json"
 }
 
-log "$NAME: $(python3 -c "import json;print(json.load(open('$W/bench.json'))['repo_url'])") at $(git -C "$B" rev-parse --short HEAD), seamreg ${TOOL_SHA:0:10}, $MODEL at $EFFORT effort"
+log "$NAME: $(python3 -I -c "import json,sys;print(json.load(open(sys.argv[1]))['repo_url'])" "$W/bench.json") at $(git -C "$B" rev-parse --short HEAD), seamreg ${TOOL_SHA:0:10}, $MODEL at $EFFORT effort"
+hide
+# A resume needs a session to continue. If turn 1 never created one, start it now instead.
+if [ "${RESUME:-}" = 1 ] && failed "$R/turn1.json" && ! grep -q '"session_id"' "$R/turn1.json" 2>/dev/null; then
+    log "resume: turn 1 never started a session; starting it now"; RESUME=0
+    [ -s "$R/prompt.md" ] || sed -e "s|@TOOL@|$T|g" -e "s|@WORK@|$W|g" "$PROMPT" > "$R/prompt.md"
+fi
 if [ "${RESUME:-}" = 1 ]; then
     n=$(ls "$R"/turn*.json 2>/dev/null | sed 's/.*turn\([0-9]*\)\.json/\1/' | sort -n | tail -1)
     n=${n:-0}; log "resume: session $SID after turn $n"
@@ -82,16 +123,21 @@ while ! result "$R/turn$n.json" | tail -c 300 | grep -q 'RUN COMPLETE'; do
 done
 
 # Save what the run made. leads.json is large and the scan can rebuild it.
+unhide
 rm -rf "$R/results"; mkdir -p "$R/results"
-cp "$B/seams.json" "$R/results/seams.json" 2>/dev/null
-cp -r "$B/.seams-scan" "$R/results/seams-scan" 2>/dev/null; rm -f "$R/results/seams-scan/leads.json"
+# Never follow a symlink out of the blind clone: a hostile repo could point seams.json at a private file.
+[ -L "$B/seams.json" ] || cp "$B/seams.json" "$R/results/seams.json" 2>/dev/null
+[ -L "$B/.seams-scan" ] || cp -rP "$B/.seams-scan" "$R/results/seams-scan" 2>/dev/null
+rm -f "$R/results/seams-scan/leads.json"
 # Copy the run's notes while the session may still resume. Move them only once it finished.
 if result "$R/turn$n.json" | tail -c 300 | grep -q 'RUN COMPLETE'; then
     mv "$B/.seams-feedback.md" "$R/results/feedback.md" 2>/dev/null
 else
     cp "$B/.seams-feedback.md" "$R/results/feedback.md" 2>/dev/null
 fi
+[ -L "$B/.seams-feedback.md" ] && rm -f "$R/results/feedback.md"
 (cd "$B" && git diff > "$R/results/repo-changes.diff")
+L=$(find "$R/results" -type l | wc -l); [ "$L" -gt 0 ] && { find "$R/results" -type l -delete; log "dropped $L symlinks from the saved results"; }
 rm -rf "$R/tmp"
 python3 -I - "$R" "$MODEL" "$EFFORT" "$TOOL_SHA" "$SID" <<'PY'
 import glob, json, os, sys

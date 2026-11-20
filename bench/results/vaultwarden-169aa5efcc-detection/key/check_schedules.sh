@@ -4,7 +4,7 @@
 # 6-field cron string) must be parsed in validate_config() with parse::<Schedule>().
 # main.rs schedules them with .parse().unwrap(), so an unvalidated bad value panics the job thread.
 set -euo pipefail
-c=$1; repo=${2:-/var/tmp/bench/vaultwarden-169aa5efcc/full}
+c=$1; repo=${2:?the path of a full vaultwarden clone}
 src=$(git -C "$repo" show "$c:src/config.rs")
 keys=$(echo "$src" | grep -E '^\s+[a-z0-9_]+:\s+String,\s+(true|false),\s+def,\s+"[0-9*/ ,-]+ [0-9*/ ,-]+ [0-9*/ ,-]+ [0-9*/ ,-]+ [0-9*/ ,-]+ [0-9*/ ,-]+"' | sed -E 's/^\s+([a-z0-9_]+):.*/\1/' | sort -u)
 n=0

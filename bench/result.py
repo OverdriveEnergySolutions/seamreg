@@ -34,6 +34,10 @@ def build(work, name, kind, submitter=None, notes=None):
     work = Path(work)
     bench = json.loads((work / "bench.json").read_text())
     summary = json.loads((work / name / "summary.json").read_text())
+    if not summary.get("complete"):
+        raise ValueError("the session did not finish (summary.json: complete is false). Resume it with RESUME=1")
+    if (work / name / "blindscan.txt").stat().st_mtime < (work / name / "summary.json").stat().st_mtime:
+        raise ValueError("blindscan.txt is older than the last session turn. Run bench/blindscan.py again")
     scan = blindscan_counts((work / name / "blindscan.txt").read_text())
     measures = json.loads((work / name / "grade" / "measures.json").read_text())
     out = {"kind": kind, **{k: bench[k] for k in ("repo_url", "snapshot", "snapshot_date", "window_end",
@@ -62,7 +66,11 @@ def main(argv=None):
     p.add_argument("workdir"); p.add_argument("name"); p.add_argument("kind")
     p.add_argument("--submitter"); p.add_argument("--notes")
     a = p.parse_args(argv)
-    out = build(a.workdir, a.name, a.kind, a.submitter, a.notes)
+    try:
+        out = build(a.workdir, a.name, a.kind, a.submitter, a.notes)
+    except (OSError, ValueError) as e:
+        print(f"result: {e}", file=sys.stderr)
+        return 1
     path = Path(a.workdir) / a.name / "result.json"
     path.write_text(json.dumps(out, indent=2) + "\n")
     print(f"wrote {path}")

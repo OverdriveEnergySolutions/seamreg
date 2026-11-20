@@ -52,8 +52,11 @@ Aim for 15 to 25 seams and 8 or more drift rows. A key with fewer than 5 drift r
 Risk: **high** when drift silently gives wrong results, loses data, or opens a security gap. **medium**
 when drift causes a visible bug. **low** when it is cosmetic or caught fast.
 
-A drift that touches security (sign-in, access checks, secrets) goes in the key as usual, because its fix
-is public. Do not describe security problems that are still open at the window's end anywhere.
+A drift that touches security (sign-in, access checks, secrets, limits that guard abuse) goes in the key
+as usual, with `security` at the start of its row's "what differed" cell. For each such row, also note
+the first release that holds its fix (`git tag --contains <fix>`). The key itself stays private until the
+submission step checks those rows. Do not describe security problems that are still open at the window's
+end anywhere.
 
 ## Final reply
 

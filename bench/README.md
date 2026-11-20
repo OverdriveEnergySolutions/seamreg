@@ -106,8 +106,11 @@ Open a pull request that adds one folder, `bench/results/<repo>-<snapshot first 
 
 Leave out the run's own registry and reviewer output. A run records bugs that may still be open in
 someone else's project, and some may touch security. Keep them, and send them to a maintainer if asked.
-Report anything about security that is still open to that project's own security contact. If a key row describes a
-security fix that the project has not shipped in a release yet, wait for the release before you submit.
+Report anything about security that is still open to that project's own security contact. Before you publish a key,
+check every row marked `security`: its fix must be in a release, and any security advisory about it must
+be public (a project may keep advisories private for a while after the release, for example until a CVE
+is assigned). Hold back each row that fails, and say so in the key; the row still counts in the totals.
+Read `blindscan.txt` too: it quotes the flagged commands.
 
 In the pull request, say: the repo and why you picked it, the model and effort, the cost, every
 blindness scan hit and what it was, and anything that went wrong.

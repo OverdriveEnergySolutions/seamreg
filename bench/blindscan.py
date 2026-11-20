@@ -24,8 +24,12 @@ from pathlib import Path
 # (, , or ) is a variable or a key (const gh = ...), not a call, and is left out. False alarms cost a
 # look; a missed call costs a leak.
 NET = re.compile(r"(?:^|(?<=[\s'\"`{;&|(]))(curl|wget|gh|nc|ssh|scp)\s+(?![=:(,)])"
-                 r"|git\s+(fetch|pull|clone|ls-remote|remote\s+add)"
-                 r"|pip3? install|uv (add|pip install)|npm (install|view)|npx |yarn add|go get ")
+                 r"|git\s+(?:-[Cc]\s+\S+\s+)*(fetch|pull|clone|ls-remote|remote\s+add|submodule\s+update)"
+                 r"|pip3? install|uv (add|pip install)|npm (install|view)|npx |yarn add|go get "
+                 r"|urllib|requests\.(get|post|put|head)|http\.client|socket\.|\bfetch\(|https?://")
+# A path that climbs out of where the session works, such as ../key/key.md or blind/../full. Every one
+# needs a look, because the session starts in the blind clone, next to the folders it must not read.
+CLIMB = re.compile(r"(?:^|[\s'\"=:/(])\.\.(?:/|[\s'\")]|$)")
 ALLOWED_IN_WORK = (r"blind(?:/|\b)", r"tool/skills", r"tool/agents", r"tool(?![/\w.-])")
 
 
@@ -88,14 +92,13 @@ def scan(files, forbid, show=False):
                 text = json.dumps(c.get("input"))
                 if c.get("name") in ("WebFetch", "WebSearch"):
                     net.append(f"{c['name']}: {text[:160]}")
-                if forbid.search(text):
-                    hit = f"{c.get('name')}: {text[:200]}"
-                    if show:
-                        hit += "\n      returned: " + seen.get(c.get("id"), "(no result)")[:400].replace("\n", " | ")
-                    hits.append(hit)
-                if c.get("name") == "Bash":
+                if forbid.search(text) or CLIMB.search(text):
+                    hits.append((f"{c.get('name')}: {text[:200]}",
+                                 seen.get(c.get("id"), "(no result)")[:400].replace("\n", " | ") if show else None))
+                if c.get("name") in ("Bash", "PowerShell"):
                     cmd = (c.get("input") or {}).get("command", "")
-                    for mm in NET.finditer(cmd):
+                    mm = NET.search(cmd)  # one entry per command, however many forms it matches
+                    if mm:
                         net.append(cmd[max(0, mm.start() - 60):mm.end() + 40])
     return calls, hits, net
 
@@ -115,10 +118,18 @@ def main(argv):
     checkout = Path(__file__).resolve().parent.parent
     calls, hits, net = scan(files, forbidden_pattern(work, checkout, name, Path.home()), show)
     lines = [f"{name}: {len(files)} transcripts, {calls} tool calls, forbidden {len(hits)}, network {len(net)}"]
-    lines += [f"  FORBIDDEN? {h}" for h in hits] + [f"  NETWORK? {n!r}" for n in net]
-    report = "\n".join(lines) + "\n"
-    (work / name / "blindscan.txt").write_text(report)
-    print(report, end="")
+    lines += [f"  FORBIDDEN? {h}" for h, _ in hits] + [f"  NETWORK? {n!r}" for n in net]
+    # The saved report holds the calls only. What a call returned can hold file contents, so --show
+    # prints it to the screen and never into blindscan.txt, which is submitted.
+    (work / name / "blindscan.txt").write_text("\n".join(lines) + "\n")
+    print(lines[0])
+    for (h, seen_text) in hits:
+        print(f"  FORBIDDEN? {h}")
+        if seen_text is not None:
+            print(f"      returned: {seen_text}")
+    for n in net:
+        print(f"  NETWORK? {n!r}")
+    print(f"Read {work / name / 'blindscan.txt'} before you submit it: it quotes the flagged commands.")
     return 1 if hits or net else 0
 
 

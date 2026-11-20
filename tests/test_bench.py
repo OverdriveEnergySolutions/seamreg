@@ -38,7 +38,7 @@ def test_the_scan_reads_subagent_transcripts_and_finds_network_calls(tmp_path):
     files = blindscan.transcripts("sid1", home=tmp_path)
     assert len(files) == 2
     calls, hits, net = blindscan.scan(files, blindscan.forbidden_pattern(Path("/w/ws"), None, "detection"))
-    assert calls == 3 and len(hits) == 1 and "key.md" in hits[0] and len(net) == 1
+    assert calls == 3 and len(hits) == 1 and "key.md" in hits[0][0] and len(net) == 1
 
 
 def make_workspace(tmp_path, measures):
@@ -94,3 +94,19 @@ def test_the_table_shows_any_kinds_measures_without_changes(tmp_path):
     text = table.render(table.load(tmp_path / "results"))
     assert "## detection" in text and "caught 3/9, partial 1/9" in text
     assert "## newkind" in text and "updated 6/10" in text
+
+
+def test_the_scan_flags_paths_that_climb_out_of_the_blind_clone():
+    for t in ("cat ../key/key.md", "ls ..", "git -C .. log", "/w/ws/blind/../full/x"):
+        assert blindscan.CLIMB.search(t), t
+    for t in ("git log HEAD~1..HEAD", "range 1..5"):
+        assert not blindscan.CLIMB.search(t), t
+
+
+def test_a_result_refuses_an_unfinished_run(tmp_path):
+    import pytest
+    make_workspace(tmp_path, {})
+    summary = tmp_path / "detection" / "summary.json"
+    summary.write_text(json.dumps(dict(json.loads(summary.read_text()), complete=False)))
+    with pytest.raises(ValueError, match="did not finish"):
+        result.build(tmp_path, "detection", "detection")

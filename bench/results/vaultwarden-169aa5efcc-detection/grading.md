@@ -66,7 +66,7 @@ Totals: 17 drifts, 2 caught, 1 partial, 14 missed.
 | open claim 1 | PRESENT | Still open at the window's end: not described. |
 | open claim 2 | PRESENT | Still open at the window's end: not described. |
 | open claim 3 | PRESENT | Still open at the window's end: not described. |
-| config-support-string-privacy-mask | FIXED | True at the snapshot. `b71cb7a8` added four of the eight named keys to `PRIVACY_CONFIG`. The rest is still open and not described here. |
+- One entry matches a key row only in part. Its other claims are still open, so they are graded below as numbered open claims.
 | open claim 4 | PRESENT | Still open at the window's end: not described. |
 | open claim 5 | PRESENT | Still open at the window's end: not described. |
 | send-access-eligibility-rule | FIXED | True at the snapshot: `post_access_file_legacy` had no `ClientIp`, and its error had no IP. `f4f1a8e1` removed the legacy handlers. |
@@ -84,4 +84,4 @@ Totals: 17 drifts, 2 caught, 1 partial, 14 missed.
 
 Totals: 18 graded of 18. 3 FIXED, 15 PRESENT, 0 WRONG, 0 UNCLEAR.
 
-Wrong detail: 0. I spot-checked the cited lines at the snapshot (for example `organization.rs:528,650,709,731`, `schema.rs:283`, `util.rs:61,110`, `sends.rs:273,347`, `admin.rs:756`, `.env.template:427`) and all of them matched.
+Wrong detail: 0. I spot-checked the cited lines of every graded claim at the snapshot, and all of them matched.
