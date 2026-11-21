@@ -14,17 +14,23 @@ Everything lives under .seams-scan/runs/. Each record is its own file, written t
 name and renamed, so agents that finish together cannot overwrite each other. Only the parent
 session's agents count: the first allowed start binds the run to that session.
 
-Run as `python3 -m seams.spend pre-tool-use|subagent-stop` from the plugin's hooks. The hooks
+The plugin's hooks run this file by its path, `python3 -I <plugin>/src/seams/spend.py <event>`: a hook
+starts inside the target repo, and isolated mode keeps that repo's files off the import path. The hooks
 never fail a session: any error leaves the call allowed and the record unchanged.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
+
+if __name__ == "__main__" and not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # the plugin's own src, nothing else
 
 from seams import check, presets
 
@@ -49,6 +55,36 @@ def _write(path, data):
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
     os.replace(tmp, path)
+
+
+@contextlib.contextmanager
+def _locked(folder, wait=8.0, stale=30.0):
+    """One hook at a time per run. Agents started in one message get their hooks run side by side,
+    and each must see the reservations the others made. A lock older than `stale` seconds belongs to
+    a hook that died, and is broken."""
+    folder.mkdir(parents=True, exist_ok=True)
+    lock = folder / ".lock"
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > stale:
+                    lock.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() > deadline:
+                raise TimeoutError("the run record stayed locked")
+            time.sleep(0.02)
+    try:
+        yield
+    finally:
+        os.close(fd)
+        with contextlib.suppress(FileNotFoundError):
+            lock.unlink()
 
 
 def _read(path):
@@ -241,6 +277,11 @@ def on_pre_tool_use(payload):
     if run is None:
         return None
     folder = _dir(out) / run["id"]
+    with _locked(folder):
+        return _check_and_reserve(out, run, folder, step, payload)
+
+
+def _check_and_reserve(out, run, folder, step, payload):
     session = (_read(folder / "session.json") or {}).get("id")
     if session is not None and session != payload.get("session_id"):
         return None
@@ -273,6 +314,12 @@ def on_subagent_stop(payload):
     if session is None or session != payload.get("session_id"):
         return None
     cost = transcript_cost(payload.get("agent_transcript_path") or "")
+    with _locked(folder):
+        _record(folder, run, step, payload, cost)
+    return None
+
+
+def _record(folder, run, step, payload, cost):
     per = float(run["per_packet"].get(step) or 0)
     aid = str(payload.get("agent_id") or uuid.uuid4().hex)
     record = {"agent_id": aid, "step": step, "agent_type": payload.get("agent_type"), "at": _now(),
@@ -286,9 +333,8 @@ def on_subagent_stop(payload):
             try:
                 res.unlink()
             except FileNotFoundError:
-                continue  # another hook took it
+                continue
             break
-    return None
 
 
 def main(argv=None):

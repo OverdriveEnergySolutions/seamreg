@@ -268,3 +268,56 @@ def test_a_one_hour_cache_write_costs_more_than_a_five_minute_one(tmp_path):
     hour.write_text(line({"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 1_000_000}))
     assert spend.transcript_cost(five)["dollars"] == pytest.approx(3.75)
     assert spend.transcript_cost(hour)["dollars"] == pytest.approx(6.0)
+
+
+def test_starts_at_the_same_moment_still_let_only_the_first_through(tmp_path, monkeypatch):
+    # Agents started in one message get their hooks run side by side. A pause between reading the
+    # record and writing the reservation makes the race certain without a lock.
+    import threading
+    import time
+    root, out = repo(tmp_path)
+    start(out, ceiling=100)
+    real_bound = spend._bound
+    monkeypatch.setattr(spend, "_bound", lambda *a, **k: (time.sleep(0.05), real_bound(*a, **k))[1])
+    results, gate = [], threading.Barrier(8)
+
+    def go():
+        gate.wait()
+        results.append(denied(spend.on_pre_tool_use(pre_payload(root))))
+
+    threads = [threading.Thread(target=go) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results.count(False) == 1
+
+
+def test_the_hook_ignores_a_seams_package_in_the_repo(tmp_path):
+    # A hook runs from inside the target repo. A seams/ folder there must not be imported.
+    root, out = repo(tmp_path)
+    (root / "seams").mkdir()
+    (root / "seams" / "__init__.py").write_text("")
+    (root / "seams" / "spend.py").write_text("import pathlib; pathlib.Path('HIJACKED').write_text('x')\n")
+    (root / "json.py").write_text("import pathlib; pathlib.Path('HIJACKED').write_text('x')\n")
+    start(out)
+    import os
+    import subprocess
+    env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(ROOT)}
+    got = subprocess.run(["bash", "-c", _hook_command("PreToolUse")], input=json.dumps(pre_payload(root)),
+                         env=env, cwd=root, capture_output=True, text=True, timeout=30)
+    assert got.returncode == 0 and not (root / "HIJACKED").exists()
+    assert spend.state(out)["reserved"] > 0
+
+
+def test_an_unmeasured_step_reserves_a_share_of_the_ceiling(tmp_path, capsys):
+    import shutil
+    root = tmp_path / "repo"
+    shutil.copytree(ROOT / "tests" / "fixtures" / "toy-repo", root)
+    (root / "seams.json").unlink(missing_ok=True)
+    assert cli.main(["scan", "--root", str(root)]) == 0
+    capsys.readouterr()
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--set", "lead_check.model=haiku",
+                     "--ceiling", "20", "--json"]) == 0
+    run = json.loads(capsys.readouterr().out)
+    assert run["per_packet"]["lead_check"] > 0

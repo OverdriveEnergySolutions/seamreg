@@ -431,7 +431,9 @@ def cmd_run(args):
                       "and pass it with --ceiling.", file=sys.stderr)
                 if args.ceiling is None:
                     return 2
-            per = {s: v["per_packet"] or 0 for s, v in est["steps"].items()}
+            # A step with no measured cost reserves an even share of the ceiling per packet, never zero.
+            per = {s: v["per_packet"] if v["per_packet"] is not None
+                   else round((args.ceiling or 0) / max(1, v["packets"]), 2) for s, v in est["steps"].items()}
             run = spend.start(out, row["settings"], est["agents"] if est["agents"] is not None else args.ceiling,
                              per, args.ceiling)
             print(json.dumps(run, indent=1) if args.json else
