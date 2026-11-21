@@ -12,18 +12,33 @@ Costs here are API-equivalent dollars. On a Claude subscription you are not char
 | Drift check | Sonnet, max effort | Sonnet, max effort |
 | Lead check | Sonnet, high effort | Sonnet, max effort |
 | Risk re-rating | Opus, medium effort | Opus, max effort |
-| Measured on one 555-file repo | about $30 | about $155, plus the re-rating at max (not measured) |
-| Known drifts found there, of 17 | 4, plus 2 partly | 8, plus 3 partly |
+| Measured on one 555-file repo | about $30 | about $158 |
+| Known drifts found there, of 17 | 3 to 4, plus 1 to 2 partly | 8 to 9, plus 3 partly |
 
 **standard** is the measured best value. Its lead check runs at high effort, which adds about 2 known drifts to a review for about $4. On the measured repo it cost about 20% of all-in.
 
-**all-in** runs every step at max effort. Its lead check reads much further beyond each lead's own files. That found about twice the known drifts of standard, for about five times the price. Most of the extra cost is the lead check: $129.54 at max against $4.44 at high.
+**all-in** runs every step at max effort. Its lead check reads much further beyond each lead's own files. That found two to three times the known drifts of standard, for about five times the price. Most of the extra cost is the lead check: $109.08 and $129.54 at max in two runs, against $2.76 and $4.44 at high.
 
 `seams presets` shows both presets with this repo's estimate. The estimate counts the scan's reviewed lines and leads, so a large repo shows a larger number than the table above.
 
 ### Why there is no cheaper preset
 
 A lead check without a review was the candidate for a cheap way in. Measured end to end with the shipped tool on two repos, agents making real past changes kept every copy in step in 16 of 36 clean runs with that registry. With no registry the figure was 13, and with a reviewed one it was 28. A cheaper preset will come back only when a configuration of it passes the same test against those two baselines.
+
+## A second pass does not replace the deeper lead check
+
+A gap pass is a second full review that gets the seams already recorded and hunts for the ones they miss. Its new seams then get the drift check. On the calibration repo, one gap pass at each preset's own settings added seams but almost no known drifts:
+
+| Run | Cost | Known drifts, of 17 | Key seams, of 20 | Seams recorded |
+|---|---|---|---|---|
+| standard | $31.87 | 3, plus 1 partly | 7, plus 1 partly | 50 |
+| standard, then a gap pass | $57.74 | 3, plus 1 partly | 7, plus 4 partly | 83 |
+| all-in | $158.29 | 9, plus 3 partly | 10, plus 5 partly | 91 |
+| all-in, then a gap pass | $180.31 | 10, plus 2 partly | 10, plus 5 partly | 123 |
+
+Each gap pass cost $22 to $26: one review packet and six to nine drift checks. The two presets run a gap pass the same way, because their review and drift check settings are the same. None of the 80 claims graded across these four runs was false.
+
+So the drifts all-in finds over standard come from its lead check, which follows the code past the places a lead names. A second review at standard's settings does not find them. On four other repos, at max effort and with an older tool, one gap pass raised the known drifts caught from 9 to 12 of 27, so a gap pass can still pay on a repo whose first review left more to find. Each figure here is one run, and one drift either way is noise between runs.
 
 ## What the estimate counts
 
@@ -92,6 +107,7 @@ Every rate is measured on child-agent transcripts, with each response counted on
 | Lead check | Sonnet, max | $0.149 per lead | 1 | vaultwarden |
 | Lead check | Sonnet, high | $0.00425 per lead | 1 | vaultwarden |
 | Risk re-rating | Opus, medium | $0.0183 per seam | 2 | dawarich, firefly-iii |
+| Risk re-rating | Opus, max | $5.88 for 2 agents, against an estimate of $23.06 | 1 | vaultwarden |
 | Seams recorded | Sonnet review | 36 per first-review packet (24 to 55 per run), 15 per lead-only packet | 5, and 1 | as the review |
 | Orchestrating session | first review | 11 to 15% of the total | 4 | as the review |
 
