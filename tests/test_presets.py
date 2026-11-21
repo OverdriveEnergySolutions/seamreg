@@ -93,6 +93,12 @@ def test_the_estimate_adds_the_steps_and_counts_the_session_separately():
 
 # --- the report, on a scanned repo -----------------------------------------------
 
+ONE_SEAM = {"schema_version": 1, "seams": [{
+    "id": "money", "title": "Money rounding", "kind": "copied-helper", "must_agree": "Both round money the same way.",
+    "copies": [{"path": "api/money.py"}, {"path": "worker/money.py"}],
+    "consequence": "Invoices and payouts disagree by a cent.", "risk": "medium"}]}
+
+
 def scanned(tmp_path, registry=None):
     # The scan tests' toy repo has one planted seam per lead kind, so every step has work.
     import shutil
@@ -125,7 +131,7 @@ def test_the_text_report_links_the_explanation(tmp_path, capsys):
 
 
 def test_a_repo_with_a_registry_also_gets_a_diff_estimate(tmp_path, capsys):
-    root = scanned(tmp_path, {"schema_version": 1, "seams": []})
+    root = scanned(tmp_path, ONE_SEAM)
     capsys.readouterr()
     assert cli.main(["presets", "--root", str(root), "--json", "--preset", "standard"]) == 0
     row = json.loads(capsys.readouterr().out)["presets"]["standard"]
@@ -133,7 +139,7 @@ def test_a_repo_with_a_registry_also_gets_a_diff_estimate(tmp_path, capsys):
 
 
 def _ratio_report(monkeypatch, tmp_path, diff_share, saved="standard"):
-    root = scanned(tmp_path, {"schema_version": 1, "seams": []})
+    root = scanned(tmp_path, ONE_SEAM)
     (root / "seams.settings.json").write_text(json.dumps({"schema_version": 1, "preset": saved}))
     full = {"review": 100_000, "lead_check": 1000, "drift_check": 10, "rerate": 50,
             "packets": {"review": 2, "lead_check": 40, "drift_check": 10, "rerate": 2}}
@@ -206,7 +212,7 @@ def test_run_start_refuses_a_diff_scan_with_no_registry(tmp_path, capsys):
 
 
 def test_run_start_records_a_diff_scans_own_estimate(tmp_path, capsys):
-    root = scanned(tmp_path, {"schema_version": 1, "seams": []})
+    root = scanned(tmp_path, ONE_SEAM)
     capsys.readouterr()
     assert cli.main(["presets", "--root", str(root), "--json", "--preset", "standard"]) == 0
     want = json.loads(capsys.readouterr().out)["presets"]["standard"]["diff"]["agents"]
@@ -227,3 +233,11 @@ def test_an_unmeasured_run_without_a_ceiling_does_not_start(tmp_path, capsys):
     assert cli.main(["run", "start", "--root", str(root), "--preset", "standard",
                      "--set", "lead_check.model=haiku"]) == 2
     assert "--ceiling" in capsys.readouterr().err and spend.open_run(root / ".seams-scan") is None
+
+
+def test_an_empty_registry_from_init_is_a_first_review(tmp_path, capsys):
+    root = scanned(tmp_path, {"schema_version": 1, "seams": []})
+    capsys.readouterr()
+    assert cli.main(["presets", "--root", str(root), "--json"]) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["has_registry"] is False and "diff" not in rep["presets"]["standard"]

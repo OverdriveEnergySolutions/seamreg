@@ -206,7 +206,8 @@ def report(root, out, preset=None, sets=(), last=None):
     reg = root / check.REGISTRY
     known = check.load(reg)["seams"] if reg.is_file() else []
     full = counts(doc, known)
-    has_registry = bool(doc.get("registry") or doc.get("baseline"))
+    # `seams init` writes an empty seams.json, so a first review has a registry with no seams in it.
+    has_registry = bool((doc.get("registry") or {}).get("seams") or doc.get("baseline"))
     diff = counts(doc, known, new_only=True) if has_registry else None
     names = [preset] if preset else list(DEFINITIONS)
     rows = {}
