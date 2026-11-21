@@ -404,7 +404,8 @@ def cmd_looked_at(args):
 def cmd_presets(args):
     from seams import presets, spend
     try:
-        rep = presets.report(args.root, _out(args), args.preset, args.set or (), spend.last_finished(_out(args)))
+        rep = presets.report(args.root, _out(args), args.preset, args.set or (), spend.last_finished(_out(args)),
+                             args.focus)
     except FileNotFoundError:
         print("seams: no scan yet. Run `seams scan` first: the estimate counts its leads.", file=sys.stderr)
         return 2
@@ -423,13 +424,20 @@ def cmd_run(args):
             if not args.preset:
                 print("seams: name the preset the user chose: --preset standard or --preset all-in", file=sys.stderr)
                 return 2
-            rep = presets.report(args.root, out, args.preset, args.set or (), spend.last_finished(out))
+            kinds = [k for k, on in (("diff", args.diff), ("gap", args.gap), ("focus", args.focus)) if on]
+            if len(kinds) > 1:
+                print("seams: --diff, --gap and --focus each price a different pass: give one.", file=sys.stderr)
+                return 2
+            rep = presets.report(args.root, out, args.preset, args.set or (), spend.last_finished(out), args.focus)
             row = rep["presets"][args.preset]
             if args.diff and "diff" not in row:
                 print("seams: --diff needs a scan made against a registry: run `seams scan --new` in a repo "
                       "with seams.json.", file=sys.stderr)
                 return 2
-            est = row["diff"] if args.diff else row["full"]
+            if (args.gap or args.focus) and not rep["has_registry"]:
+                print("seams: a gap or focused pass needs the seams of a first review in seams.json.", file=sys.stderr)
+                return 2
+            est = row[kinds[0]] if kinds else row["full"]
             # An agent whose cost cannot be read counts at its step's per-packet estimate (0 when unmeasured).
             per = {s: v["per_packet"] or 0 for s, v in est["steps"].items()}
             run = spend.start(out, row["settings"], est["agents"], per)
@@ -801,6 +809,7 @@ def build_parser():
     p.add_argument("--preset", choices=list(checker.PRESETS), help="show this preset only")
     p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE",
                    help="change one setting for this run, for example lead_check.effort=xhigh")
+    p.add_argument("--focus", choices=sorted(split_focus_names()), help="also price a focused pass of this kind")
     p.add_argument("--json", action="store_true", help="print JSON, for the review skill")
     p.set_defaults(func=cmd_presets)
 
@@ -811,6 +820,10 @@ def build_parser():
     p.add_argument("--preset", choices=list(checker.PRESETS), help="with start: the preset the user chose")
     p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE", help="with start: this run's changes")
     p.add_argument("--diff", action="store_true", help="with start: a diff scan, priced on the new leads only")
+    p.add_argument("--gap", action="store_true",
+                   help="with start: a gap pass, priced on its review packets and the seams they add")
+    p.add_argument("--focus", choices=sorted(split_focus_names()),
+                   help="with start: a focused pass of this kind, priced like a gap pass")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_run)
 

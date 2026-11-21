@@ -61,10 +61,14 @@ def test_a_bad_change_is_refused_with_its_text(bad):
 
 
 def test_an_effort_above_every_measured_one_errs_high():
-    measured, ok = presets.rate("lead_check", "sonnet", "high")
-    stretched, ok2 = presets.rate("rerate", "opus", "max")
-    assert ok and not ok2
-    assert stretched == pytest.approx(presets.RATES[("rerate", "opus", "medium")] * presets.MAX_STRETCH)
+    table = {("rerate", "opus", "medium"): 0.0183}
+    stretched, ok = presets.rate("rerate", "opus", "max", table)
+    assert not ok and stretched == pytest.approx(0.0183 * presets.MAX_STRETCH)
+
+
+def test_the_opus_re_rating_at_max_is_measured():
+    r, ok = presets.rate("rerate", "opus", "max")
+    assert ok and r == pytest.approx(5.88 / 54, rel=0.01)
 
 
 def test_an_unmeasured_effort_between_measured_ones_borrows_the_higher():
@@ -261,3 +265,58 @@ def test_a_diff_scans_lead_check_takes_only_the_new_leads(tmp_path, capsys):
     assert "lead check packets" in capsys.readouterr().out
     assert cli.main(["split", "--lead-check", "--new-only", "--root", str(root)]) == 0
     assert "Nothing to check" in capsys.readouterr().out
+
+
+def test_a_gap_pass_is_priced_on_its_own_packets_with_no_lead_check(tmp_path, capsys):
+    from seams import split
+    root = scanned(tmp_path, ONE_SEAM)
+    capsys.readouterr()
+    assert cli.main(["presets", "--root", str(root), "--json"]) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["has_registry"] is True
+    gap = rep["counts"]["gap"]
+    _, bins = split.pass_bins(split.load_leads(root / ".seams-scan"), known=ONE_SEAM["seams"])
+    assert gap["review"] == sum(b["lines"] for b in bins) and gap["packets"]["review"] == len(bins)
+    assert gap["lead_check"] == 0 and gap["rerate"] == len(bins) * presets.SEAMS_PER_GAP_PACKET
+    allin = rep["presets"]["all-in"]
+    assert allin["gap"]["steps"]["lead_check"]["dollars"] == 0
+    assert allin["gap"]["agents"] < allin["full"]["agents"]
+
+
+def test_run_start_gap_records_the_gap_estimate(tmp_path, capsys):
+    root = scanned(tmp_path, ONE_SEAM)
+    capsys.readouterr()
+    assert cli.main(["presets", "--root", str(root), "--json", "--preset", "all-in"]) == 0
+    want = json.loads(capsys.readouterr().out)["presets"]["all-in"]["gap"]["agents"]
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "all-in", "--gap", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["estimate"] == want
+
+
+def test_run_start_focus_records_the_focused_pass_estimate(tmp_path, capsys):
+    root = scanned(tmp_path, ONE_SEAM)
+    capsys.readouterr()
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--focus", "twins", "--json"]) == 0
+    run = json.loads(capsys.readouterr().out)
+    want = presets.report(root, root / ".seams-scan", "standard", focus="twins")["presets"]["standard"]["focus"]
+    assert run["estimate"] == want["agents"]
+
+
+def test_a_gap_pass_needs_a_registry_and_one_pass_at_a_time(tmp_path, capsys):
+    bare = scanned(tmp_path / "a")
+    assert cli.main(["run", "start", "--root", str(bare), "--preset", "standard", "--gap"]) == 2
+    assert "needs the seams of a first review" in capsys.readouterr().err
+    root = scanned(tmp_path / "b", ONE_SEAM)
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--gap", "--diff"]) == 2
+    assert "give one" in capsys.readouterr().err
+
+
+def test_a_registry_without_a_scan_against_it_has_no_diff_estimate(tmp_path, capsys):
+    # The scan ran before seams.json existed, as on a first review: there is a registry, and a gap
+    # pass can be priced, but nothing marks leads as new, so there is no diff scan.
+    root = scanned(tmp_path)
+    (root / "seams.json").write_text(json.dumps(ONE_SEAM))
+    capsys.readouterr()
+    assert cli.main(["presets", "--root", str(root), "--json"]) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["has_registry"] is True and "gap" in rep["presets"]["standard"]
+    assert "diff" not in rep["presets"]["standard"]

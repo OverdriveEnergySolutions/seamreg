@@ -90,11 +90,13 @@ A full reviewer gets hundreds of leads with its areas and acts on few of them. T
 One review finds about half of a repo's seams, and a second blind review spends much of its effort finding the same ones again. A gap pass hunts only for what the earlier passes missed. Measured on four public repos with known drifts, the share caught rose from 33% after a first review to 44% after one gap pass and 52% after two. The second gap pass still caught a known drift on two of the four, at about three quarters of a first review's cost. So after step 7, tell the user that a first review plus two gap passes is the measured starting point, and offer the first gap pass. Stop early when a gap pass adds no new high-risk seam and no new drift.
 
 1. Run `seams split --gap`. It moves the earlier passes' review files and drift-check results into `done/` folders, because their seams are already in `seams.json`. Each packet lists the seams `seams.json` already records in its areas, and tells its reviewer to find the ones the list misses, including a second seam in a file the list names. A lead stays in unless one recorded seam names every one of its files by path: a glob copy does not hide a lead.
-2. Show the user the packet count and the cost from `plan.md`, and get a yes. A gap packet costs about what a first-pass packet costs.
-3. Start one `seam-reviewer` per gap packet, at max effort, as in step 4.
+2. Run `seams presets --json`. Show the user the packet count from `plan.md` and each preset's `gap` estimate: the review, the drift check and the re-rating of the new seams, with no lead check. Get a choice and a yes. Then run `seams run start --preset <name> --gap`, so the hooks check and record this pass.
+3. Start one `seam-reviewer` per gap packet, at the review step's model and effort, as in step 4.
 4. Run `seams merge` and settle the report as in step 5. Entries already in `seams.json` stay as they are unless a plan says otherwise. A new copy of a recorded seam shows under the section for existing seams, and drift a reviewer found on a recorded seam shows under "Drift found on seams already in seams.json". `"extend"` in a plan adds either one: it adds the copies, and it adds the drift, or appends it to drift already recorded.
 5. Run the drift check on the new seams. The new seams are in the proposal until you apply it, so name it: `seams verify --registry .seams-scan/seams.proposed.json --ids <id,id>`, with the new high- and medium-risk seams and the new convention seams that have no drift. Show the user the count and the cost, and on a yes start one `seam-drift-checker` per packet. Then run `seams verify --collect --registry .seams-scan/seams.proposed.json`, read the report as in step 6, and run `seams apply --confirm <id,id>` for the drift that holds. Then `seams notes` if the registry sets notes.
-6. The private findings files keep what earlier passes wrote, so step 8 applies to the whole file again.
+6. Re-rate the new seams: run `seams rerate --ids <new ids>`, then steps 2 and 3 of "Re-rating risk". Both presets re-rate, and a pass's new seams otherwise keep the reviewer's ratings.
+7. Run `seams run finish`, and report the pass's spend against its estimate.
+8. The private findings files keep what earlier passes wrote, so step 8 applies to the whole file again.
 
 ## Focused passes
 
@@ -109,9 +111,9 @@ Offer a focused pass after the gap passes, as an option and not in place of one,
 `seams next` lists each focused pass whose leads the scan found, with the count. Offer the ones it lists.
 
 1. Run `seams split --focus <kind>`. Like a gap pass, it needs `seams.json` and moves the earlier passes' review files and drift-check results into `done/` folders. Its one packet lists every recorded seam and the leads of its kind.
-2. Show the user the lead count and the cost from `plan.md`, and get a yes.
-3. Start one `seam-reviewer` on the packet, at max effort.
-4. Settle the merge, run the drift check on the new seams, and apply, as in steps 4 to 6 of the gap passes.
+2. Run `seams presets --json --focus <kind>`. Show the user the lead count from `plan.md` and each preset's `focus` estimate, and get a choice and a yes. The estimate is not measured and may be low: one twins pass cost $21 to $29. Then run `seams run start --preset <name> --focus <kind>`.
+3. Start one `seam-reviewer` on the packet, at the review step's model and effort.
+4. Settle the merge, run the drift check on the new seams, apply, re-rate the new seams and finish the run, as in steps 4 to 8 of the gap passes.
 
 ## Re-scans
 

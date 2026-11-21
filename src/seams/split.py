@@ -476,12 +476,10 @@ def archive_earlier_passes(out):
     return moved
 
 
-def write(doc, root, out, max_lines=DEFAULT_MAX_LINES, new_only=False, cross_area_only=False, known=None,
-          focus=None):
-    """Write the packets and plan.md. `known` (the seams of seams.json) makes a gap pass, and
-    `focus` (a FOCUS key, with `known`) a focused pass."""
-    out = Path(out).resolve()
-    root = Path(root).resolve()
+def pass_bins(doc, max_lines=DEFAULT_MAX_LINES, new_only=False, cross_area_only=False, known=None, focus=None):
+    """The leads a pass works from, and its packets. `known` (the seams of seams.json) makes a gap
+    pass, and `focus` (a FOCUS key, with `known`) a focused pass. `write` and the cost estimate both
+    use this, so the estimate prices the packets `seams split` writes."""
     lead_only = new_only or cross_area_only
     if focus is not None and (known is None or focus not in FOCUS):
         raise ValueError(f"--focus takes one of {', '.join(FOCUS)} and needs a registry from a first review.")
@@ -502,6 +500,18 @@ def write(doc, root, out, max_lines=DEFAULT_MAX_LINES, new_only=False, cross_are
     if known is not None:
         for b in bins:
             b["name"] = f"focus-{focus}" if focus else "gap-" + b["name"]
+    return doc, bins
+
+
+def write(doc, root, out, max_lines=DEFAULT_MAX_LINES, new_only=False, cross_area_only=False, known=None,
+          focus=None):
+    """Write the packets and plan.md. `known` (the seams of seams.json) makes a gap pass, and
+    `focus` (a FOCUS key, with `known`) a focused pass."""
+    out = Path(out).resolve()
+    root = Path(root).resolve()
+    lead_only = new_only or cross_area_only
+    doc, bins = pass_bins(doc, max_lines, new_only, cross_area_only, known, focus)
+    if known is not None:
         archive_earlier_passes(out)
     (out / "packets").mkdir(parents=True, exist_ok=True)
     (out / "reviews").mkdir(exist_ok=True)

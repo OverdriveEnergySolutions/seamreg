@@ -53,6 +53,7 @@ RATES = {
     ("lead_check", "sonnet", "max"): 0.149,  # 1 run
     ("lead_check", "sonnet", "high"): 0.00425,  # 1 run
     ("rerate", "opus", "medium"): 0.0183,  # 2 runs, at Opus's default effort
+    ("rerate", "opus", "max"): 0.109,  # 1 run: 54 seams for $5.88
 }
 # A review packet costs mostly a fixed amount: each step of the reviewer's tool loop re-reads its
 # context, whatever the packet's size. Fitted on 6 runs (16 packets, 6k to 75k lines each, first reviews
@@ -72,6 +73,7 @@ PRICES = {
 }
 SEAMS_PER_PACKET = 36  # seams a first review records per packet: 24 to 55 per packet over 5 reviews
 SEAMS_PER_LEAD_PACKET = 15  # seams a lead-only packet adds: 1 run of 3 packets
+SEAMS_PER_GAP_PACKET = 33  # seams a gap packet adds: 2 runs of 1 packet, 33 and 32
 CHECKED_SHARE = 0.2  # share of recorded seams the drift check picks: high and medium risk, no drift yet
 CHECKED_CAP = 20  # the skill samples at most this many
 ORCHESTRATOR_SHARE = 0.13  # the session that runs the skill: 11 to 15% of a first review's total
@@ -167,6 +169,20 @@ def counts(doc, known, new_only=False):
                         "drift_check": checked, "rerate": math.ceil(seams / rerate.BATCH)}}
 
 
+def pass_counts(doc, known, focus=None):
+    """Units of work for a gap pass (or, with `focus`, a focused pass): the review packets
+    `seams split --gap` writes, then the drift check and the re-rating of the seams they add. A pass
+    runs no lead check. A focused pass's seam count borrows the lead-only rate: not measured."""
+    from seams import rerate, split
+    _, bins = split.pass_bins(doc, known=known, focus=focus)
+    lines = sum(b["lines"] for b in bins)
+    seams = len(bins) * (SEAMS_PER_LEAD_PACKET if focus else SEAMS_PER_GAP_PACKET)
+    checked = min(CHECKED_CAP, round(seams * CHECKED_SHARE))
+    return {"review": lines, "lead_check": 0, "drift_check": checked, "rerate": seams,
+            "packets": {"review": len(bins), "lead_check": 0, "drift_check": checked,
+                        "rerate": math.ceil(seams / rerate.BATCH)}}
+
+
 def _packet_units():
     """Units of work in one full packet, by step: the floor of a step's per-packet estimate."""
     from seams import leadcheck, rerate, split
@@ -208,9 +224,10 @@ def estimate(settings, work):
     return {"steps": steps, "agents": agents, "orchestrator": session}
 
 
-def report(root, out, preset=None, sets=(), last=None):
+def report(root, out, preset=None, sets=(), last=None, focus=None):
     """Everything the skill needs before a paid run, as one JSON-ready dict. `last` is the last
-    finished run (spend.last_finished), which says whether a preset changed since."""
+    finished run (spend.last_finished), which says whether a preset changed since. With seams in
+    seams.json, each preset also gets a gap pass's estimate, and with `focus` a focused pass's."""
     from seams import split
     root, out = Path(root), Path(out)
     saved = load_saved(root)
@@ -219,8 +236,12 @@ def report(root, out, preset=None, sets=(), last=None):
     known = check.load(reg)["seams"] if reg.is_file() else []
     full = counts(doc, known)
     # `seams init` writes an empty seams.json, so a first review has a registry with no seams in it.
-    has_registry = bool((doc.get("registry") or {}).get("seams") or doc.get("baseline"))
-    diff = counts(doc, known, new_only=True) if has_registry else None
+    has_registry = bool(known)
+    # A diff scan needs a scan made against the registry (`seams scan --new`), not just a registry.
+    scanned_against = bool((doc.get("registry") or {}).get("seams") or doc.get("baseline"))
+    diff = counts(doc, known, new_only=True) if scanned_against else None
+    gap = pass_counts(doc, known) if known else None
+    focused = pass_counts(doc, known, focus) if known and focus else None
     names = [preset] if preset else list(DEFINITIONS)
     rows = {}
     for name in names:
@@ -233,11 +254,15 @@ def report(root, out, preset=None, sets=(), last=None):
             row["diff_percent"] = round(100 * a / b) if a is not None and b else None
             limit = s["diff_limit_percent"]["value"]
             row["diff_over_limit"] = None if row["diff_percent"] is None else row["diff_percent"] > limit
+        if gap is not None:
+            row["gap"] = estimate(eff, gap)
+        if focused is not None:
+            row["focus"] = estimate(eff, focused)
         row["definition_changed"] = bool(last and last.get("preset") == name
                                          and last.get("fingerprint") != s["fingerprint"])
         rows[name] = row
     return {"saved": (saved or {}).get("preset"), "has_registry": has_registry, "presets": rows,
-            "counts": {"full": full, "diff": diff}}
+            "counts": {"full": full, "diff": diff, "gap": gap, "focus": focused}}
 
 
 def _money(x):
@@ -267,6 +292,10 @@ def text(rep):
             out.append(f"  Diff scan: about {_money(row['diff']['agents'])}"
                        + (f", {row['diff_percent']}% of a full run" if row["diff_percent"] is not None else "")
                        + (" (over the limit: ask first)" if row.get("diff_over_limit") else ""))
+        for key, label in (("gap", "Gap pass"), ("focus", "Focused pass")):
+            if key in row:
+                out.append(f"  {label}: about {_money(row[key]['agents'])} for the agents: the review, the drift "
+                           "check and the re-rating of the seams it adds, no lead check.")
         if row["definition_changed"]:
             out.append("  This preset changed in this release since your last run: ask before running it.")
     return "\n".join(out)

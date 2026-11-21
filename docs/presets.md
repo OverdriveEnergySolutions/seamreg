@@ -43,6 +43,7 @@ So the drifts all-in finds over standard come from its lead check, which follows
 ## What the estimate counts
 
 - **The agents.** The estimate prices each step's work at a rate measured on earlier runs (the table below). During a run, a hook adds up what each agent really cost from its own transcript, and the skill reports the two side by side at the end.
+- **A gap or focused pass** is priced on its own work: the review packets `seams split --gap` writes, the drift check and the re-rating of the seams they add, and no lead check. On the calibration repo the gap estimate was $19.35 on standard, against $22.58 spent. A focused pass's estimate is not measured and may be low: one twins pass cost $21 to $29.
 - **Not the session that runs them.** The agent you talk to also spends while it orchestrates. On first reviews that was 11 to 15% of the total. `seams presets` shows it on its own line, and the run record does not count it.
 - **A setting with no measurement** is estimated from the nearest measured one, and errs high: an effort above every measured one takes the highest measured rate times 35, the largest jump measured from high to max. The text says "not measured at this effort". A model with no measurement at all has no estimate: the text says "not measured".
 
