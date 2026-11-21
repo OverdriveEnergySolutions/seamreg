@@ -46,7 +46,7 @@ BUYS = {
 # transcripts, each message counted once; docs/presets.md gives the source of every row.
 UNIT = {"review": "reviewed line", "drift_check": "seam", "lead_check": "lead", "rerate": "seam"}
 RATES = {
-    ("review", "sonnet", "max"): 0.000194,  # 4 first reviews, 561k lines; per run 0.000134 to 0.000265
+    ("review", "sonnet", "max"): 0.0000434,  # plus REVIEW_PACKET per packet: see below
     ("drift_check", "sonnet", "max"): 1.01,  # 5 runs, 33 seams
     ("drift_check", "sonnet", "xhigh"): 0.111,  # 1 run
     ("drift_check", "sonnet", "high"): 0.053,  # 3 runs, seams a lead check added
@@ -54,6 +54,11 @@ RATES = {
     ("lead_check", "sonnet", "high"): 0.00425,  # 1 run
     ("rerate", "opus", "medium"): 0.0183,  # 2 runs, at Opus's default effort
 }
+# A review packet costs mostly a fixed amount: each step of the reviewer's tool loop re-reads its
+# context, whatever the packet's size. Fitted on 6 runs (16 packets, 6k to 75k lines each, first reviews
+# and a lead-only pass): $ = REVIEW_PACKET x packets + RATES[review] x lines, within 0.83 to 1.36 of each
+# run's real cost. A rate per line alone was 0.15 to 1.45 of it.
+REVIEW_PACKET = {("review", "sonnet", "max"): 8.53}
 # An effort above every measured one borrows the highest measured rate below it, times the largest
 # measured jump from high to max (the lead check's, 35x), so the estimate errs high until measured.
 MAX_STRETCH = 35
@@ -65,7 +70,8 @@ PRICES = {
     "claude-sonnet-5-5": (2.00, 10.00, 2.50, 4.00, 0.10),
     "claude-opus-5-5": (4.00, 20.00, 5.00, 8.00, 0.20),
 }
-SEAMS_PER_LINE = 0.00054  # seams a first review records per reviewed line, 4 reviews
+SEAMS_PER_PACKET = 36  # seams a first review records per packet: 24 to 55 per packet over 5 reviews
+SEAMS_PER_LEAD_PACKET = 15  # seams a lead-only packet adds: 1 run of 3 packets
 CHECKED_SHARE = 0.2  # share of recorded seams the drift check picks: high and medium risk, no drift yet
 CHECKED_CAP = 20  # the skill samples at most this many
 ORCHESTRATOR_SHARE = 0.13  # the session that runs the skill: 11 to 15% of a first review's total
@@ -129,20 +135,21 @@ def plain(settings):
 
 # --- the estimate -----------------------------------------------------------
 
-def rate(step, model, effort):
+def rate(step, model, effort, table=None):
     """(dollars per unit, measured) for a step. An unmeasured effort borrows the nearest measured
     higher effort for the same model. Above every measured effort, it takes the highest measured
     rate times MAX_STRETCH. Either way the estimate errs high. None when the model has no rate."""
-    if (step, model, effort) in RATES:
-        return RATES[(step, model, effort)], True
+    table = RATES if table is None else table
+    if (step, model, effort) in table:
+        return table[(step, model, effort)], True
     order = check.EFFORTS
     higher = order[order.index(effort) + 1:]
     for e in higher:
-        if (step, model, e) in RATES:
-            return RATES[(step, model, e)], False
+        if (step, model, e) in table:
+            return table[(step, model, e)], False
     for e in reversed(order[:order.index(effort)]):
-        if (step, model, e) in RATES:
-            return RATES[(step, model, e)] * MAX_STRETCH, False
+        if (step, model, e) in table:
+            return table[(step, model, e)] * MAX_STRETCH, False
     return None, False
 
 
@@ -153,7 +160,7 @@ def counts(doc, known, new_only=False):
     bins = split._drop_empty(split.plan(picked, lead_units_only=new_only))
     lines = sum(b["lines"] for b in bins)
     leads = len(leadcheck.select(picked, known))
-    seams = round(lines * SEAMS_PER_LINE)
+    seams = len(bins) * (SEAMS_PER_LEAD_PACKET if new_only else SEAMS_PER_PACKET)
     checked = min(CHECKED_CAP, round(seams * CHECKED_SHARE))
     return {"review": lines, "lead_check": leads, "drift_check": checked, "rerate": seams,
             "packets": {"review": len(bins), "lead_check": math.ceil(leads / leadcheck.BATCH),
@@ -176,15 +183,20 @@ def estimate(settings, work):
     for step in STEPS:
         model, effort = settings[step]["model"], settings[step]["effort"]
         r, measured = rate(step, model, effort)
+        fixed = 0.0
+        if step == "review" and r is not None:
+            fixed, fixed_measured = rate(step, model, effort, REVIEW_PACKET)
+            measured = measured and fixed_measured
+            fixed = fixed or 0.0
         n = work.get(step)
-        dollars = None if r is None or n is None else round(r * n, 2)
         packets = work["packets"].get(step) or 0
+        dollars = None if r is None or n is None else round(r * n + fixed * packets, 2)
         if r is None:
             per_packet = None
         elif dollars and packets:
             per_packet = round(dollars / packets, 2)
         else:
-            per_packet = round(r * full[step], 2)
+            per_packet = round(r * full[step] + fixed, 2)
         steps[step] = {"agent": AGENT[step], "model": model, "effort": effort, "units": n, "unit": UNIT[step],
                        "dollars": dollars, "measured": measured, "per_packet": per_packet, "packets": packets}
         if dollars is None:

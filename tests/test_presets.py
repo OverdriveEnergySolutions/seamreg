@@ -85,10 +85,19 @@ def test_the_estimate_adds_the_steps_and_counts_the_session_separately():
     work = {"review": 100_000, "lead_check": 1000, "drift_check": 10, "rerate": 50,
             "packets": {"review": 2, "lead_check": 40, "drift_check": 10, "rerate": 2}}
     est = presets.estimate(presets.plain(presets.resolve("standard")), work)
-    want = 100_000 * 0.000194 + 1000 * 0.00425 + 10 * 1.01 + 50 * 0.0183
+    review = 100_000 * presets.RATES[("review", "sonnet", "max")] + 2 * presets.REVIEW_PACKET[("review", "sonnet", "max")]
+    want = review + 1000 * 0.00425 + 10 * 1.01 + 50 * 0.0183
     assert est["agents"] == pytest.approx(want, abs=0.02)
     assert est["orchestrator"] == pytest.approx(want * presets.ORCHESTRATOR_SHARE, abs=0.02)
-    assert est["steps"]["review"]["per_packet"] == pytest.approx(9.7, abs=0.01)
+    assert est["steps"]["review"]["per_packet"] == pytest.approx(review / 2, abs=0.01)
+
+
+def test_a_small_review_packet_still_costs_its_fixed_part():
+    # Measured: a 6,406-line packet cost $8.15. A rate per line alone priced it at $1.24.
+    work = {"review": 6406, "lead_check": 0, "drift_check": 0, "rerate": 0,
+            "packets": {"review": 1, "lead_check": 0, "drift_check": 0, "rerate": 0}}
+    est = presets.estimate(presets.plain(presets.resolve("standard")), work)
+    assert 0.7 * 8.15 < est["steps"]["review"]["dollars"] < 1.3 * 8.15
 
 
 # --- the report, on a scanned repo -----------------------------------------------
@@ -142,8 +151,9 @@ def _ratio_report(monkeypatch, tmp_path, diff_share, saved="standard"):
     root = scanned(tmp_path, ONE_SEAM)
     (root / "seams.settings.json").write_text(json.dumps({"schema_version": 1, "preset": saved}))
     full = {"review": 100_000, "lead_check": 1000, "drift_check": 10, "rerate": 50,
-            "packets": {"review": 2, "lead_check": 40, "drift_check": 10, "rerate": 2}}
-    diff = {k: (round(v * diff_share) if isinstance(v, int) else v) for k, v in full.items()}
+            "packets": {"review": 10, "lead_check": 40, "drift_check": 10, "rerate": 10}}
+    diff = {k: round(v * diff_share) for k, v in full.items() if k != "packets"}
+    diff["packets"] = {k: round(v * diff_share) for k, v in full["packets"].items()}
     monkeypatch.setattr(presets, "counts", lambda doc, known, new_only=False: diff if new_only else full)
     return presets.report(root, root / ".seams-scan", saved)["presets"][saved]
 

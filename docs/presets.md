@@ -64,7 +64,7 @@ The settings live in their own file because a team's CI runs its own copy of the
 | Any run after a release changed the saved preset | Yes, once |
 | No preset saved | Yes |
 
-A diff scan runs every step of the preset on the diff only: the reviewers take the new leads' packets, the lead check the new leads, and the drift check and re-rating the new seams. A diff scan's packets hold only the folders its new leads touch, so a small diff gets a small review.
+A diff scan runs every step of the preset on the diff only: the reviewers take the new leads' packets, the lead check the new leads, and the drift check and re-rating the new seams. A diff scan's packets hold only the folders its new leads touch, so a small diff reviews little code. Each packet still costs its fixed part, about $8.50 on standard.
 
 ## Every setting
 
@@ -85,17 +85,17 @@ Every rate is measured on child-agent transcripts, with each response counted on
 
 | Step | Model, effort | Rate | Runs | Repos |
 |---|---|---|---|---|
-| Review | Sonnet, max | $0.000194 per reviewed line (0.000134 to 0.000265 per run) | 4 | vaultwarden, dawarich (twice), firefly-iii |
+| Review | Sonnet, max | $8.53 per packet plus $0.0000434 per reviewed line (each run 0.83 to 1.36 times this) | 6 | vaultwarden, dawarich (twice), firefly-iii (twice), seamreg |
 | Drift check | Sonnet, max | $1.01 per seam | 5 | vaultwarden (twice), dawarich (twice), firefly-iii |
 | Drift check | Sonnet, xhigh | $0.111 per seam | 1 | vaultwarden |
 | Drift check | Sonnet, high | $0.053 per seam | 3 | vaultwarden |
 | Lead check | Sonnet, max | $0.149 per lead | 1 | vaultwarden |
 | Lead check | Sonnet, high | $0.00425 per lead | 1 | vaultwarden |
 | Risk re-rating | Opus, medium | $0.0183 per seam | 2 | dawarich, firefly-iii |
-| Seams recorded | Sonnet review | 5.4 per 10,000 reviewed lines | 4 | as the review |
+| Seams recorded | Sonnet review | 36 per first-review packet (24 to 55 per run), 15 per lead-only packet | 5, and 1 | as the review |
 | Orchestrating session | first review | 11 to 15% of the total | 4 | as the review |
 
-Most rates rest on one or two runs, and the review's rate varies twice over between runs. Treat an estimate as a range of about that width. The benchmarks page has the detection and prevention results behind the trade-offs: [benchmarks.md](benchmarks.md).
+Most rates rest on one or two runs. A review packet costs mostly a fixed amount, because the reviewer re-reads its context at each step of its work, so a small repo's review costs nearly as much as a large one's. Treat an estimate as a range of about a third either way. The benchmarks page has the detection and prevention results behind the trade-offs: [benchmarks.md](benchmarks.md).
 
 ## Limits
 
