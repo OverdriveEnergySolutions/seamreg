@@ -251,3 +251,15 @@ def test_an_empty_registry_from_init_is_a_first_review(tmp_path, capsys):
     assert cli.main(["presets", "--root", str(root), "--json"]) == 0
     rep = json.loads(capsys.readouterr().out)
     assert rep["has_registry"] is False and "diff" not in rep["presets"]["standard"]
+
+
+def test_a_diff_scans_lead_check_takes_only_the_new_leads(tmp_path, capsys):
+    # With every lead in the baseline there is nothing new, so the diff's lead check has nothing to do.
+    root = scanned(tmp_path, ONE_SEAM)
+    assert cli.main(["baseline", "--root", str(root)]) == 0
+    assert cli.main(["scan", "--new", "--root", str(root)]) == 0
+    capsys.readouterr()
+    assert cli.main(["split", "--lead-check", "--root", str(root)]) == 0
+    assert "lead check packets" in capsys.readouterr().out
+    assert cli.main(["split", "--lead-check", "--new-only", "--root", str(root)]) == 0
+    assert "Nothing to check" in capsys.readouterr().out

@@ -65,7 +65,8 @@ def cost_text(n):
 
 def select(data, risks=("high", "medium"), ids=None, every=False, sample=None, seed=0, reading=False):
     """The seams to check: by default high and medium risk with no drift recorded. With
-    `reading`, the seams in `risks` whose drift was found only by reading.
+    `reading`, the seams in `risks` whose drift was found only by reading. With `ids`, the same
+    selection among those seams only, and with `every` too, each of them.
 
     Medium is in the default because a medium seam held a confirmed bug that two full
     reviews missed. A convention seam with no drift is checked at any risk: its rule covers
@@ -74,10 +75,9 @@ def select(data, risks=("high", "medium"), ids=None, every=False, sample=None, s
     within the risk level that does not fit (the same seed gives the same pick)."""
     out = []
     for s in data["seams"]:
-        if ids is not None:
-            if s["id"] in ids:
-                out.append(s)
-        elif reading:
+        if ids is not None and s["id"] not in ids:
+            continue  # `ids` narrows the seams the selection below looks at: a diff scan's new seams
+        if reading:
             if s["risk"] in risks and (s.get("drift") or {}).get("source") == "reading":
                 out.append(s)
         elif every or (not s.get("drift") and (s["risk"] in risks or s.get("kind") == "convention")):

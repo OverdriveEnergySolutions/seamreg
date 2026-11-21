@@ -623,6 +623,8 @@ def cmd_split(args):
 
 def _split_lead_check(args, doc, out, known):
     from seams import leadcheck, passes
+    if args.new_only:  # a diff scan's lead check: only the leads new since the last review
+        doc = splitter.filter_leads(doc, new_only=True)
     bins = leadcheck.write(doc, args.root, out, known, keep_agreeing=args.keep_agreeing)
     if not bins:
         print("seams: every strong lead is covered by a recorded seam. Nothing to check.")
@@ -746,7 +748,8 @@ def build_parser():
     p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
     p.add_argument("--registry", help="registry to read and update (default: <root>/seams.json)")
     p.add_argument("--risk", default="high,medium", help="risks to check, comma-separated (default: high,medium)")
-    p.add_argument("--ids", help="check these seam ids only, comma-separated")
+    p.add_argument("--ids", help="choose among these seam ids only, comma-separated (a diff scan's new seams). "
+                                 "The default selection still applies: add --all to check every one")
     p.add_argument("--all", action="store_true", help="check every seam, whatever its risk or drift")
     p.add_argument("--reading", action="store_true",
                    help="check seams in --risk whose drift was found only by reading: a second opinion")
