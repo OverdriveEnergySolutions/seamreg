@@ -5,9 +5,9 @@
 #   [PRESET=standard] [MODEL=claude-sonnet-5-5] [EFFORT=max] [MAX_TURNS=6] [ANSWER_FILE=f] [DRY_RUN=1] \
 #       bench/session.sh WORKDIR NAME PROMPT_FILE
 #
-# PRESET is the seamreg preset the session runs (standard or all-in). The default answer names it, and
-# tells the session to stop and report at the run's ceiling, never to raise it: nobody is there to say
-# yes. DRY_RUN=1 prints that answer and exits before anything starts.
+# PRESET is the seamreg preset the session runs (standard or all-in). The default answer names it, tells
+# the session to start a refused agent again at the model and effort the refusal names, and to run every
+# step even past the estimate, then report the spend. DRY_RUN=1 prints that answer and exits first.
 #
 # WORKDIR comes from bench/snapshot.sh. The session works in WORKDIR/blind and saves to WORKDIR/NAME/.
 # PROMPT_FILE may use @TOOL@ (the frozen tool copy) and @WORK@ (WORKDIR). It must ask the session to
@@ -29,7 +29,7 @@ HERE=$(cd "$(dirname "$0")/.." && pwd)
 MODEL=${MODEL:-claude-sonnet-5-5}; EFFORT=${EFFORT:-max}; MAX_TURNS=${MAX_TURNS:-6}
 PRESET=${PRESET:-standard}
 case "$PRESET" in standard|all-in) ;; *) echo "run: PRESET must be standard or all-in, not '$PRESET'" >&2; exit 1 ;; esac
-ANSWER_DEFAULT="Yes. Use the $PRESET preset for every paid step, with each step's model and effort from the run. Do not save the preset. If a start is refused at the run's ceiling, do not raise it: nobody can approve a raise here, so stop, list what finished and what did not, and report. Skip any optional second-opinion pass. For notes or agents, your pick. Then continue to the end of the workflow."
+ANSWER_DEFAULT="Yes. Use the $PRESET preset for every paid step, with each step's model and effort from the run. Do not save the preset. If a start is refused, start the agent again with the model and effort the refusal names. Run every step of the preset even past the estimate: nobody is here to stop it, so report the spend against the estimate at the end. Skip any optional second-opinion pass. For notes or agents, your pick. Then continue to the end of the workflow."
 ANSWER=$ANSWER_DEFAULT; [ -n "${ANSWER_FILE:-}" ] && ANSWER=$(cat "$ANSWER_FILE")
 if [ "${DRY_RUN:-}" = 1 ]; then echo "preset: $PRESET"; echo "answer: $ANSWER"; exit 0; fi
 B=$W/blind; T=$W/tool; R=$W/$NAME

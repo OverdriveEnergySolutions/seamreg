@@ -138,10 +138,12 @@ def _dry(preset):
                           env=env, capture_output=True, text=True, timeout=30)
 
 
-def test_a_preset_run_answers_with_its_preset_and_never_raises_the_ceiling():
+def test_a_preset_run_answers_with_its_preset_and_restarts_a_refused_agent():
     got = _dry("standard")
     assert got.returncode == 0
-    assert "Use the standard preset" in got.stdout and "do not raise it" in got.stdout
+    assert "Use the standard preset" in got.stdout
+    assert "start the agent again with the model and effort the refusal names" in got.stdout
+    assert "ceiling" not in got.stdout
 
 
 def test_an_unknown_preset_stops_before_anything_runs():

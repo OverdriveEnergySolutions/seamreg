@@ -32,7 +32,7 @@ The parts are separate so new kinds of benchmark can reuse them:
 | Part | What it does | Who uses it |
 |---|---|---|
 | [`snapshot.sh`](snapshot.sh) | Makes a workspace: a full clone, a blind clone at the snapshot, and `bench.json` | Every kind |
-| [`session.sh`](session.sh) | Runs one prompt blind in the workspace, on one seamreg preset (`PRESET=standard` or `all-in`), and records the model, effort, preset and cost: the session's total, and the seamreg agents' own from the run record. The session stops at the run's ceiling, never raises it. `DRY_RUN=1` prints the answer it will give. `RESUME=1` continues a session that stopped early | Every kind that runs seamreg |
+| [`session.sh`](session.sh) | Runs one prompt blind in the workspace, on one seamreg preset (`PRESET=standard` or `all-in`), and records the model, effort, preset and cost: the session's total, and the seamreg agents' own from the run record. The session starts a refused agent again at the model and effort the refusal names, and runs every step even past the estimate. `DRY_RUN=1` prints the answer it will give. `RESUME=1` continues a session that stopped early | Every kind that runs seamreg |
 | [`task.sh`](task.sh) | Runs a non-blind session (the key, the grading) with the same isolation, and keeps its cost | Every kind with a key or a grader |
 | [`blindscan.py`](blindscan.py) | Checks one blind session's transcripts. `--show` prints what each flagged call returned | Every blind session |
 | [`result.py`](result.py) | Writes `result.json`: a common envelope plus the kind's own `measures` | Every kind |
