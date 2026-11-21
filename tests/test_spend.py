@@ -80,6 +80,12 @@ def repo(tmp_path):
     return tmp_path, tmp_path / ".seams-scan"
 
 
+def subrepo(tmp_path, name):
+    """A repo in its own folder, so files a test writes beside it stay outside it."""
+    (tmp_path / name).mkdir()
+    return repo(tmp_path / name)
+
+
 def denied(out):
     return bool(out) and out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -110,7 +116,7 @@ def test_an_agent_at_another_effort_is_reported_as_a_difference(tmp_path):
     start(out)
     spend.on_pre_tool_use(pre_payload(root))
     spend.on_subagent_stop(stop_payload(root, fixture="two-models-at-max.jsonl"))
-    [d] = spend.state(out)["differences"]
+    [d] = [d for d in spend.state(out)["differences"] if d["setting"] == "effort"]
     assert d["step"] == "lead_check" and d["expected"] == "high" and d["ran"] == ["max"]
 
 
@@ -271,11 +277,14 @@ def test_a_one_hour_cache_write_costs_more_than_a_five_minute_one(tmp_path):
     assert spend.transcript_cost(hour)["dollars"] == pytest.approx(6.0)
 
 
-def test_starts_at_the_same_moment_still_let_only_the_first_through(tmp_path, monkeypatch):
+@pytest.mark.parametrize("flock", [True, False], ids=["flock", "lock-file"])
+def test_starts_at_the_same_moment_still_let_only_the_first_through(tmp_path, monkeypatch, flock):
     # Agents started in one message get their hooks run side by side. A pause between reading the
     # record and writing the reservation makes the race certain without a lock.
     import threading
     import time
+    if not flock:  # Windows has no flock: the lock is a file made with O_EXCL
+        monkeypatch.setattr(spend, "fcntl", None)
     root, out = repo(tmp_path)
     start(out, ceiling=100)
     real_bound = spend._bound
@@ -372,3 +381,139 @@ def test_a_lock_held_by_another_process_waits_and_is_never_broken(tmp_path):
     holder.wait(timeout=10)
     with spend._locked(folder, wait=2):  # free once the holder is gone
         pass
+
+
+def test_a_lock_file_left_by_a_dead_hook_is_taken_over(tmp_path, monkeypatch):
+    import os
+    import time
+    monkeypatch.setattr(spend, "fcntl", None)
+    folder = tmp_path / "run"
+    folder.mkdir()
+    (folder / ".lock").write_text("dead-hook")
+    old = time.time() - 120
+    os.utime(folder / ".lock", (old, old))
+    with spend._locked(folder, wait=1):
+        assert (folder / ".lock").read_text() != "dead-hook"
+    assert not (folder / ".lock").exists()
+
+
+# --- review fixes: each one a way a run could pass its ceiling unseen -----------------
+
+def _transcript(tmp_path, name, lines):
+    path = tmp_path / name
+    path.write_text("\n".join(json.dumps(x) for x in lines))
+    return path
+
+
+def _line(mid, model, out_tokens, effort="high"):
+    return {"type": "assistant", "effort": effort, "message": {"id": mid, "model": model, "usage": {
+        "input_tokens": 0, "output_tokens": out_tokens, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}}
+
+
+def test_a_claude_code_notice_in_a_transcript_keeps_the_real_cost(tmp_path):
+    # A "Login expired" or API error notice is written as model "<synthetic>" with no usage.
+    path = _transcript(tmp_path, "t.jsonl", [_line("m1", "claude-sonnet-5-5", 200_000),
+                                             _line("m2", "<synthetic>", 0)])
+    got = spend.transcript_cost(path)
+    assert got["dollars"] == pytest.approx(3.0) and got["unpriced"] == [] and got["models"] == ["claude-sonnet-5-5"]
+
+
+def _stop_with(tmp_path, root, aid, dollars_out, agent="seam-reviewer", model="claude-sonnet-5-5"):
+    path = _transcript(tmp_path, f"{aid}.jsonl", [_line(aid, model, dollars_out, effort="max")])
+    payload = stop_payload(root, agent=agent, aid=aid)
+    payload["agent_transcript_path"] = str(path)
+    spend.on_subagent_stop(payload)
+
+
+def test_an_over_cost_first_packet_raises_the_rest_of_the_steps_reservations(tmp_path):
+    root, out = subrepo(tmp_path, "r")
+    start(out, ceiling=10.0, per_packet={s: 1.0 for s in presets.STEPS})
+    assert not denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")))
+    _stop_with(tmp_path, root, "first", 200_000)  # $3.00 at the test price, against a $1.00 estimate
+    got = [denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))) for _ in range(5)]
+    assert got == [False, False, True, True, True]  # 3 spent + 3 + 3 = 9; one more would pass 10
+    assert spend.state(out)["reserved"] == pytest.approx(6.0)
+
+
+def test_a_step_with_a_zero_estimate_reserves_its_first_agents_real_cost(tmp_path):
+    root, out = subrepo(tmp_path, "r")
+    start(out, ceiling=10.0, per_packet={**{s: 1.0 for s in presets.STEPS}, "drift_check": 0.0})
+    spend.on_pre_tool_use(pre_payload(root, agent="seam-drift-checker"))
+    _stop_with(tmp_path, root, "first", 200_000, agent="seam-drift-checker")
+    got = [denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-drift-checker"))) for _ in range(4)]
+    assert got == [False, False, True, True]
+
+
+def test_an_agent_on_another_model_is_reported_as_a_difference(tmp_path):
+    root, out = subrepo(tmp_path, "r")
+    start(out, ceiling=100)
+    spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))
+    _stop_with(tmp_path, root, "a1", 1000, model="claude-opus-5-5")  # standard reviews on Sonnet
+    [d] = spend.state(out)["differences"]
+    assert d["setting"] == "model" and d["expected"] == "claude-sonnet-5-5" and d["ran"] == ["claude-opus-5-5"]
+
+
+def test_finish_waits_for_running_agents(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+    with pytest.raises(ValueError, match="still running"):
+        spend.finish(out)
+    assert spend.open_run(out) is not None
+
+
+def test_a_stop_counts_running_agents_and_still_records_them(tmp_path):
+    root, out = subrepo(tmp_path, "r")
+    start(out, per_packet={s: 1.0 for s in presets.STEPS})
+    spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))
+    st = spend.finish(out, "stopped")
+    assert st["status"] == "stopped" and spend.last_finished(out)["actual"] == pytest.approx(1.0)
+    _stop_with(tmp_path, root, "late", 200_000)  # it ends after the stop, at $3.00
+    run = spend.last_finished(out)
+    st = spend.state(out, run)
+    assert [a["agent_id"] for a in st["agents"]] == ["late"] and st["recorded"] == pytest.approx(3.0)
+    assert st["reserved"] == 0
+
+
+def test_the_stop_command_closes_the_run_as_stopped(tmp_path, capsys):
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+    assert cli.main(["run", "finish", "--root", str(root)]) == 2
+    assert cli.main(["run", "stop", "--root", str(root)]) == 0
+    assert "stopped" in capsys.readouterr().out and spend.last_finished(out)["status"] == "stopped"
+
+
+def test_a_start_from_another_session_is_not_charged_to_the_run(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root, session="sess-A"))  # binds the run
+    assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer", session="sess-B")) is None
+    assert spend.state(out)["reserved"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("bad_id", ["ABSOLUTE", "../../../outside"])
+def test_a_planted_run_record_cannot_send_the_hooks_outside_the_record(tmp_path, bad_id):
+    # A target repo can commit its own .seams-scan/runs/runs.json. Only an id `start` writes names a folder.
+    root, out = subrepo(tmp_path, "repo")
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "session.json").write_text('{"keep": "me"}')
+    run_id = str(victim) if bad_id == "ABSOLUTE" else bad_id
+    (out / "runs").mkdir(parents=True)
+    (out / "runs" / "runs.json").write_text(json.dumps({"runs": [
+        {"id": run_id, "status": "open", "ceiling": 1e6, "per_packet": {"review": 0.01}, "settings": {}}]}))
+    assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")) is None
+    assert spend.on_subagent_stop(stop_payload(root, agent="seam-reviewer")) is None
+    assert sorted(p.name for p in victim.iterdir()) == ["session.json"]
+    assert (victim / "session.json").read_text() == '{"keep": "me"}'
+    assert not (tmp_path / "outside").exists()
+
+
+def test_an_agent_id_that_is_not_a_plain_name_does_not_name_the_file(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root, aid="../../escape"))
+    [a] = spend.state(out)["agents"]
+    assert "/" not in a["agent_id"] and not (tmp_path / "escape.json").exists()

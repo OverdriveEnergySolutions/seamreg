@@ -57,6 +57,9 @@ RATES = {
 # An effort above every measured one borrows the highest measured rate below it, times the largest
 # measured jump from high to max (the lead check's, 35x), so the estimate errs high until measured.
 MAX_STRETCH = 35
+# The model id each model setting runs as, to report an agent that ran on another model.
+MODEL_IDS = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5", "haiku": "claude-haiku-5-5",
+             "fable": "claude-fable-5-2"}
 # Dollars per million tokens: input, output, cache write (5 minutes), cache write (1 hour), cache read.
 PRICES = {
     "claude-sonnet-5-5": (2.00, 10.00, 2.50, 4.00, 0.10),
@@ -157,20 +160,33 @@ def counts(doc, known, new_only=False):
                         "drift_check": checked, "rerate": math.ceil(seams / rerate.BATCH)}}
 
 
+def _packet_units():
+    """Units of work in one full packet, by step: the floor of a step's per-packet estimate."""
+    from seams import leadcheck, rerate, split
+    return {"review": split.DEFAULT_MAX_LINES, "lead_check": leadcheck.BATCH, "drift_check": 1,
+            "rerate": rerate.BATCH}
+
+
 def estimate(settings, work):
     """Dollars per step and in all. A step whose rate or count is not known has dollars None,
-    and the totals then say so."""
+    and the totals then say so. A step estimated at no packets still gets a per-packet estimate,
+    one full packet's worth, because the agents may still find work for it."""
     steps, total, known = {}, 0.0, True
+    full = _packet_units()
     for step in STEPS:
         model, effort = settings[step]["model"], settings[step]["effort"]
         r, measured = rate(step, model, effort)
         n = work.get(step)
         dollars = None if r is None or n is None else round(r * n, 2)
         packets = work["packets"].get(step) or 0
+        if r is None:
+            per_packet = None
+        elif dollars and packets:
+            per_packet = round(dollars / packets, 2)
+        else:
+            per_packet = round(r * full[step], 2)
         steps[step] = {"agent": AGENT[step], "model": model, "effort": effort, "units": n, "unit": UNIT[step],
-                       "dollars": dollars, "measured": measured,
-                       "per_packet": round(dollars / packets, 2) if dollars is not None and packets else dollars,
-                       "packets": packets}
+                       "dollars": dollars, "measured": measured, "per_packet": per_packet, "packets": packets}
         if dollars is None:
             known = False
         else:
@@ -180,9 +196,10 @@ def estimate(settings, work):
     return {"steps": steps, "agents": agents, "orchestrator": session}
 
 
-def report(root, out, preset=None, sets=()):
-    """Everything the skill needs before a paid run, as one JSON-ready dict."""
-    from seams import spend, split
+def report(root, out, preset=None, sets=(), last=None):
+    """Everything the skill needs before a paid run, as one JSON-ready dict. `last` is the last
+    finished run (spend.last_finished), which says whether a preset changed since."""
+    from seams import split
     root, out = Path(root), Path(out)
     saved = load_saved(root)
     doc = split.load_leads(out)
@@ -191,7 +208,6 @@ def report(root, out, preset=None, sets=()):
     full = counts(doc, known)
     has_registry = bool(doc.get("registry") or doc.get("baseline"))
     diff = counts(doc, known, new_only=True) if has_registry else None
-    last = spend.last_finished(out)
     names = [preset] if preset else list(DEFINITIONS)
     rows = {}
     for name in names:

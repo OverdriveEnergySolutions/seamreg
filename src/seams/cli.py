@@ -402,9 +402,9 @@ def cmd_looked_at(args):
 
 
 def cmd_presets(args):
-    from seams import presets
+    from seams import presets, spend
     try:
-        rep = presets.report(args.root, _out(args), args.preset, args.set or ())
+        rep = presets.report(args.root, _out(args), args.preset, args.set or (), spend.last_finished(_out(args)))
     except FileNotFoundError:
         print("seams: no scan yet. Run `seams scan` first: the estimate counts its leads.", file=sys.stderr)
         return 2
@@ -423,16 +423,20 @@ def cmd_run(args):
             if not args.preset:
                 print("seams: name the preset the user chose: --preset standard or --preset all-in", file=sys.stderr)
                 return 2
-            rep = presets.report(args.root, out, args.preset, args.set or ())
+            rep = presets.report(args.root, out, args.preset, args.set or (), spend.last_finished(out))
             row = rep["presets"][args.preset]
+            if args.diff and "diff" not in row:
+                print("seams: --diff needs a scan made against a registry: run `seams scan --new` in a repo "
+                      "with seams.json.", file=sys.stderr)
+                return 2
             est = row["diff"] if args.diff else row["full"]
             if est["agents"] is None:
                 print("seams: this run's cost is not measured for these settings. Ask the user for a ceiling "
                       "and pass it with --ceiling.", file=sys.stderr)
                 if args.ceiling is None:
                     return 2
-            # A step with no measured cost reserves an even share of the ceiling per packet, never zero.
-            per = {s: v["per_packet"] if v["per_packet"] is not None
+            # A step with no measured rate reserves an even share of the ceiling per packet, never zero.
+            per = {s: v["per_packet"] if v["per_packet"]
                    else round((args.ceiling or 0) / max(1, v["packets"]), 2) for s, v in est["steps"].items()}
             run = spend.start(out, row["settings"], est["agents"] if est["agents"] is not None else args.ceiling,
                              per, args.ceiling)
@@ -447,9 +451,8 @@ def cmd_run(args):
         else:
             st = spend.finish(out, "stopped" if args.action == "stop" else "finished")
             print(json.dumps(st, indent=1) if args.json else
-                  f"run {st['run']} {args.action}ed: ${st['recorded']:,.2f} spent against an estimate of "
-                  f"${st['estimate']:,.2f}" + (f". {len(st['differences'])} agent(s) ran at another effort."
-                                                if st["differences"] else "."))
+                  f"run {st['run']} {'stopped' if args.action == 'stop' else 'finished'}: ${st['recorded']:,.2f} "
+                  f"spent against an estimate of ${st['estimate']:,.2f}" + _spend_notes(st) + ".")
     except spend.OpenRun as e:
         st = e.state
         print(f"seams: run {st['run']} is still open (${st['recorded']:,.2f} spent). Report it, then close it "
@@ -463,6 +466,21 @@ def cmd_run(args):
     return 0
 
 
+def _spend_notes(st):
+    """What the spend text adds after the dollars: agents still running, costs not known, and agents
+    that ran on another model or effort than the preset."""
+    notes = []
+    if st["reserved"]:
+        notes.append(f"${st['reserved']:,.2f} reserved for agents still running")
+    if st["unknown"]:
+        notes.append(f"{len(st['unknown'])} agent(s) with cost unknown, counted at the estimate")
+    for setting in ("model", "effort"):
+        n = len({d["agent_id"] for d in st["differences"] if d["setting"] == setting})
+        if n:
+            notes.append(f"{n} agent(s) ran on another {setting} than the preset")
+    return "".join(f". {n[0].upper()}{n[1:]}" for n in notes)
+
+
 def cmd_spend(args):
     from seams import spend
     st = spend.state(_out(args))
@@ -471,10 +489,8 @@ def cmd_spend(args):
     elif st["run"] is None:
         print("No run is open.")
     else:
-        print(f"run {st['run']} ({st['preset']}): ${st['recorded']:,.2f} spent, ${st['reserved']:,.2f} running, "
-              f"ceiling ${st['ceiling']:,.2f}, {len(st['agents'])} agent(s) finished"
-              + (f", {len(st['unknown'])} with cost unknown" if st["unknown"] else "")
-              + (f", {len(st['differences'])} at another effort" if st["differences"] else "") + ".")
+        print(f"run {st['run']} ({st['preset']}): ${st['recorded']:,.2f} spent, ceiling ${st['ceiling']:,.2f}, "
+              f"{len(st['agents'])} agent(s) finished" + _spend_notes(st) + ".")
     return 0
 
 
@@ -786,7 +802,7 @@ def build_parser():
     p = sub.add_parser("presets", help="the presets, their settings, and what each costs on this repo")
     p.add_argument("--root", default=".")
     p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
-    p.add_argument("--preset", choices=["standard", "all-in"], help="show this preset only")
+    p.add_argument("--preset", choices=list(checker.PRESETS), help="show this preset only")
     p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE",
                    help="change one setting for this run, for example lead_check.effort=xhigh")
     p.add_argument("--json", action="store_true", help="print JSON, for the review skill")
@@ -796,7 +812,7 @@ def build_parser():
     p.add_argument("action", choices=["start", "raise", "stop", "finish"])
     p.add_argument("--root", default=".")
     p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
-    p.add_argument("--preset", choices=["standard", "all-in"], help="with start: the preset the user chose")
+    p.add_argument("--preset", choices=list(checker.PRESETS), help="with start: the preset the user chose")
     p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE", help="with start: this run's changes")
     p.add_argument("--diff", action="store_true", help="with start: a diff scan, priced on the new leads only")
     p.add_argument("--ceiling", type=float, help="with start: the ceiling in dollars, when not the estimate")

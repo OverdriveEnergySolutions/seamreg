@@ -24,6 +24,7 @@ import contextlib
 import datetime
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -36,6 +37,10 @@ from seams import check, presets
 
 RUNS = "runs"
 HEADER = "runs.json"
+# The only run ids and agent ids that name a folder or a file. A record in the target repo is not
+# trusted: an id like "../x" or "/x" would send the hooks' writes outside the record folder.
+RUN_ID = re.compile(r"\d{8}-\d{6}-[0-9a-f]{6}")
+AGENT_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 STEP_OF = {agent: step for step, agent in presets.AGENT.items()}
 
 
@@ -155,6 +160,8 @@ def transcript_cost(path):
         m = d.get("message") if isinstance(d, dict) else None
         if not isinstance(m, dict) or not isinstance(m.get("usage"), dict):
             continue
+        if not any(_parts(m["usage"])):  # Claude Code's own notices (model "<synthetic>") cost nothing
+            continue
         key = m.get("id") or d.get("requestId") or f"line{len(usage)}"
         usage[key] = m["usage"]
         model_of[key] = m.get("model") or "unknown"
@@ -191,9 +198,16 @@ def _header(out):
     return {"runs": []}
 
 
-def _open_of(head):
+def _last(head):
+    """The last run, when `start` wrote it. Any other record is ignored."""
     runs = head["runs"]
-    return runs[-1] if runs and runs[-1].get("status") == "open" else None
+    run = runs[-1] if runs else None
+    return run if isinstance(run, dict) and RUN_ID.fullmatch(str(run.get("id"))) else None
+
+
+def _open_of(head):
+    run = _last(head)
+    return run if run and run.get("status") == "open" else None
 
 
 def open_run(out):
@@ -238,11 +252,18 @@ def raise_ceiling(out, to):
 
 
 def finish(out, status="finished"):
+    """Close the run. A finish waits for every agent. A stop closes with agents still running:
+    their reservations count in `actual`, and each one's real cost is still recorded when it ends."""
     run = open_run(out)
     if run is None:
         raise ValueError("no run is open. Start one with `seams run start`.")
-    recorded = state(out, run)["recorded"]
-    return state(out, _update_open(out, status=status, ended=_now(), actual=recorded))
+    st = state(out, run)
+    running = len(_files(out, run, "res"))
+    if running and status == "finished":
+        raise ValueError(f"{running} agent(s) of run {run['id']} are still running. Wait for them to finish, "
+                         "or close the run now with `seams run stop`.")
+    return state(out, _update_open(out, status=status, ended=_now(), actual=round(st["recorded"] + st["reserved"], 4),
+                                   running=running))
 
 
 def _files(out, run, prefix):
@@ -251,7 +272,7 @@ def _files(out, run, prefix):
 
 
 def state(out, run=None):
-    """Recorded spend, open reservations, the ceiling, each agent, and effort differences."""
+    """Recorded spend, open reservations, the ceiling, each agent, and model and effort differences."""
     run = run or open_run(out)
     if run is None:
         return {"run": None}
@@ -260,9 +281,14 @@ def state(out, run=None):
     recorded = sum(a["counted"] for a in agents)
     diffs = []
     for a in agents:
-        want = run["settings"].get(a["step"], {}).get("effort")
-        if want and a["efforts"] and a["efforts"] != [want]:
-            diffs.append({"agent_id": a["agent_id"], "step": a["step"], "expected": want, "ran": a["efforts"]})
+        want = run["settings"].get(a["step"], {})
+        effort, model = want.get("effort"), presets.MODEL_IDS.get(want.get("model"))
+        if effort and a["efforts"] and a["efforts"] != [effort]:
+            diffs.append({"agent_id": a["agent_id"], "step": a["step"], "setting": "effort",
+                          "expected": effort, "ran": a["efforts"]})
+        if model and a["models"] and a["models"] != [model]:
+            diffs.append({"agent_id": a["agent_id"], "step": a["step"], "setting": "model",
+                          "expected": model, "ran": a["models"]})
     session = _read(_dir(out) / run["id"] / "session.json") or {}
     return {"run": run["id"], "preset": run["preset"], "status": run["status"], "session": session.get("id"),
             "estimate": run["estimate"], "ceiling": run["ceiling"], "recorded": round(recorded, 4),
@@ -326,7 +352,9 @@ def _check_and_reserve(out, run, folder, step, payload):
     if not done and waiting:
         return _deny(f"seams: the first {presets.STEP_TEXT[step]} agent of this run has not finished. "
                      "Wait for it: its real cost corrects the estimate before the rest start.")
-    amount = float(run["per_packet"].get(step) or 0)
+    # The step's costliest finished agent corrects its estimate upward, so a batch after an over-cost
+    # first packet reserves what that packet really cost.
+    amount = max([float(run["per_packet"].get(step) or 0)] + [a["counted"] for a in done])
     if recorded + reserved + amount > run["ceiling"] + 1e-9:
         return _deny(f"seams: this would pass the run's ceiling of ${run['ceiling']:,.2f} "
                      f"(${recorded:,.2f} spent, ${reserved:,.2f} running). Ask the user. "
@@ -344,7 +372,7 @@ def on_subagent_stop(payload):
     if not step:
         return None
     out = _out_for(payload)
-    run = open_run(out) if out else None
+    run = _recording(out) if out else None
     if run is None:
         return None
     folder = _dir(out) / run["id"]
@@ -361,9 +389,18 @@ def on_subagent_stop(payload):
     return None
 
 
+def _recording(out):
+    """The run a finishing agent belongs to: the open run, or a run stopped while agents still ran."""
+    run = _last(_header(out))
+    if run and (run.get("status") == "open" or (run.get("status") == "stopped" and run.get("running"))):
+        return run
+    return None
+
+
 def _record(folder, run, step, payload, cost, release=True):
     per = float(run["per_packet"].get(step) or 0)
-    aid = str(payload.get("agent_id") or uuid.uuid4().hex)
+    aid = str(payload.get("agent_id") or "")
+    aid = aid if AGENT_ID.fullmatch(aid) else uuid.uuid4().hex
     record = {"agent_id": aid, "step": step, "agent_type": payload.get("agent_type"), "at": _now(),
               "dollars": cost["dollars"], "counted": cost["dollars"] if cost["dollars"] is not None else per,
               "models": cost["models"], "efforts": cost["efforts"], "tokens": cost["tokens"],

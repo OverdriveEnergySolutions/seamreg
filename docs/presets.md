@@ -33,11 +33,15 @@ A lead check without a review was the candidate for a cheap way in. Measured end
 
 ## The ceiling
 
-`seams run start` opens a record of the run, and its estimate becomes the run's ceiling. Before each seamreg agent starts, a plugin hook reserves that packet's estimated cost. It refuses the start when spend so far, plus the agents still running, plus this packet, would pass the ceiling. It also holds a step's second agent until the first one finishes, so the first packet's real cost can correct the estimate before the rest start.
+`seams run start` opens a record of the run, and its estimate becomes the run's ceiling. Before each seamreg agent starts, a plugin hook reserves that packet's estimated cost. It refuses the start when spend so far, plus the agents still running, plus this packet, would pass the ceiling. It also holds a step's second agent until the first one finishes. After that, each start of the step reserves the step's per-packet estimate or the costliest packet of the step so far, whichever is higher. So a first packet that cost more than its estimate raises what the rest of the batch reserves. A step the estimate gave no packets (a small repo can show no drift check) still reserves one full packet per start.
 
 When a start is refused, the skill shows you what has been spent and asks. Only your yes raises the ceiling (`seams run raise --to <dollars>`). A run with nobody to ask, such as a benchmark or CI run, stops there and reports what finished and what did not.
 
 A run ends at most one batch past its ceiling, because agents already running cannot be stopped.
+
+`seams run finish` waits until every agent has finished. `seams run stop` closes the run at once: agents still running count at their reservations, and each one's real cost is still recorded when it ends. `seams spend` and the end of a run list each agent that ran on another model or effort than the preset. They also list each agent whose cost is not known, which counts at the step's estimate.
+
+When a setting has no measured rate at all (a model with no measurement), `seams run start` asks for a ceiling instead of making one up: pass `--ceiling <dollars>`. Each step with no rate then reserves an even share of that ceiling per packet.
 
 ## Saving a preset
 

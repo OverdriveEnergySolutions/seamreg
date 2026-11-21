@@ -160,11 +160,12 @@ def test_a_changed_definition_is_reported_once_and_keeps_the_teams_change(monkey
     s = presets.resolve("standard")
     spend.start(out, s, estimate=1.0, per_packet={k: 0.1 for k in presets.STEPS})
     spend.finish(out)
-    assert presets.report(root, out, "standard")["presets"]["standard"]["definition_changed"] is False
+    last = spend.last_finished(out)
+    assert presets.report(root, out, "standard", last=last)["presets"]["standard"]["definition_changed"] is False
     changed = {**presets.DEFINITIONS, "standard": {**presets.DEFINITIONS["standard"],
                                                    "drift_check": {"model": "sonnet", "effort": "high"}}}
     monkeypatch.setattr(presets, "DEFINITIONS", changed)
-    row = presets.report(root, out, "standard")["presets"]["standard"]
+    row = presets.report(root, out, "standard", last=last)["presets"]["standard"]
     assert row["definition_changed"] is True
     assert row["settings"]["steps"]["lead_check"]["effort"] == {"value": "xhigh", "source": "saved"}
 
@@ -181,3 +182,48 @@ def test_run_start_records_the_estimate_as_its_ceiling(tmp_path, capsys):
     run = json.loads(capsys.readouterr().out)
     assert run["ceiling"] == run["estimate"] > 0 and run["preset"] == "standard"
     assert set(run["per_packet"]) == set(check.STEPS)
+
+
+def test_a_step_estimated_at_no_packets_still_reserves_one_packet():
+    # A small repo estimates no drift check, but the reviewers may still record seams that need one.
+    work = {"review": 4000, "lead_check": 10, "drift_check": 0, "rerate": 2,
+            "packets": {"review": 1, "lead_check": 1, "drift_check": 0, "rerate": 1}}
+    st = presets.estimate(presets.plain(presets.resolve("standard")), work)["steps"]["drift_check"]
+    assert st["dollars"] == 0 and st["per_packet"] == pytest.approx(presets.RATES[("drift_check", "sonnet", "max")])
+
+
+def test_presets_does_not_import_the_spend_hooks():
+    # The hooks import presets. A cycle back would break every hook the day an import moves.
+    text = (ROOT / "src/seams/presets.py").read_text()
+    assert "import spend" not in text and "spend," not in text
+
+
+def test_run_start_refuses_a_diff_scan_with_no_registry(tmp_path, capsys):
+    root = scanned(tmp_path)
+    capsys.readouterr()
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--diff"]) == 2
+    assert "--diff" in capsys.readouterr().err and spend.open_run(root / ".seams-scan") is None
+
+
+def test_run_start_records_a_diff_scans_own_estimate(tmp_path, capsys):
+    root = scanned(tmp_path, {"schema_version": 1, "seams": []})
+    capsys.readouterr()
+    assert cli.main(["presets", "--root", str(root), "--json", "--preset", "standard"]) == 0
+    want = json.loads(capsys.readouterr().out)["presets"]["standard"]["diff"]["agents"]
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--diff", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["estimate"] == want
+
+
+def test_run_start_needs_a_preset_and_refuses_a_second_open_run(tmp_path, capsys):
+    root = scanned(tmp_path)
+    assert cli.main(["run", "start", "--root", str(root)]) == 2
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard"]) == 0
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "all-in"]) == 2
+    assert "still open" in capsys.readouterr().err
+
+
+def test_an_unmeasured_run_without_a_ceiling_does_not_start(tmp_path, capsys):
+    root = scanned(tmp_path)
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard",
+                     "--set", "lead_check.model=haiku"]) == 2
+    assert "--ceiling" in capsys.readouterr().err and spend.open_run(root / ".seams-scan") is None
