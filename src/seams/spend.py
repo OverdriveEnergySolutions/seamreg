@@ -12,8 +12,10 @@ Spend is recorded and reported against the estimate, never capped: some repos ne
 estimate, and a cap would stop a run half done.
 
 A target repo can commit its own .seams-scan, run record included. So `seams run start` also writes
-the run's id to a marker outside the repo, in this user's state folder, and the hooks act only on the
-run that marker names. A planted record sets no model, no effort and no text in a refusal.
+the run's id, preset and settings to a marker outside the repo, in this user's state folder. The hooks
+act only on the run that marker names, check starts against the marker's own copy of the settings, and
+stop checking once `finish` or `stop` closes the marker. A planted or edited record sets no model, no
+effort and no text in a refusal.
 
 Everything lives under .seams-scan/runs/. Each record is its own file, written to a temporary
 name and renamed, so agents that finish together cannot overwrite each other. Only the parent
@@ -234,12 +236,18 @@ def _marker(out):
     return base / "seamreg" / "runs" / f"{key}.json"
 
 
-def _trusted(out, run):
-    """The run, when this user's own `seams run start` opened it here. Otherwise None."""
+def _trusted(out, run, open_only=True):
+    """The run as this user's own `seams run start` opened it here, with the preset and settings taken
+    from the marker, not from the record in the repo. None when the marker does not name this run, or
+    (with open_only) when the run was closed."""
     if run is None:
         return None
     mark = _read(_marker(out))
-    return run if isinstance(mark, dict) and mark.get("run") == run.get("id") else None
+    if not isinstance(mark, dict) or mark.get("run") != run.get("id"):
+        return None
+    if open_only and mark.get("status") != "open":
+        return None
+    return {**run, "preset": mark.get("preset"), "settings": mark.get("settings") or {}}
 
 
 def start(out, settings, estimate, per_packet):
@@ -254,7 +262,8 @@ def start(out, settings, estimate, per_packet):
            "estimate": estimate, "per_packet": per_packet}
     head["runs"].append(run)
     _write(_dir(out) / HEADER, head)
-    _write(_marker(out), {"run": run["id"], "record": str(Path(out).resolve()), "started": run["started"]})
+    _write(_marker(out), {"run": run["id"], "record": str(Path(out).resolve()), "started": run["started"],
+                          "status": "open", "preset": run["preset"], "settings": run["settings"]})
     return run
 
 
@@ -279,8 +288,11 @@ def finish(out, status="finished"):
     if running and status == "finished":
         raise ValueError(f"{running} agent(s) of run {run['id']} are still running. Wait for them to finish, "
                          "or close the run now with `seams run stop`.")
-    return state(out, _update_open(out, status=status, ended=_now(), actual=st["recorded"],
-                                   running=running))
+    closed = _update_open(out, status=status, ended=_now(), actual=st["recorded"], running=running)
+    mark = _read(_marker(out))
+    if isinstance(mark, dict) and mark.get("run") == run["id"]:
+        _write(_marker(out), {**mark, "status": status})
+    return state(out, closed)
 
 
 def _files(out, run, prefix):
@@ -423,7 +435,7 @@ def on_subagent_stop(payload):
     if not step:
         return None
     out = _out_for(payload)
-    run = _trusted(out, _recording(out)) if out else None
+    run = _trusted(out, _recording(out), open_only=False) if out else None
     folder = _hook_folder(out, run) if run else None
     if folder is None:
         return None
