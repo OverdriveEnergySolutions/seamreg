@@ -168,6 +168,14 @@ One round of agents over the repo. Each pass adds to the registry:
 
 `seams next` ranks the passes worth running next. [passes.md](passes.md) lists what each cost.
 
+### Preset, settings file and run record
+A **preset** names the model and the effort for each paid step: the review, the drift check, the lead check
+and the risk re-rating. There are two, standard and all-in. `seams presets` shows both with this repo's
+estimated cost. The **settings file**, `seams.settings.json`, holds the preset a team saved and only the
+settings it changed. A **run record** (`.seams-scan/runs/`) holds one paid run: its preset, its estimate
+and ceiling, and what each agent really cost and the effort it ran at. [presets.md](presets.md) explains
+them.
+
 ### Merge, plan and apply
 `seams merge` turns the agents' findings into a proposed registry, `.seams-scan/seams.proposed.json`, and a
 report of everything to settle: possible duplicates, dropped copies, drift to confirm. A **plan** file

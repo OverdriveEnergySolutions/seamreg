@@ -120,6 +120,8 @@ Some things to know:
 - **Cursor and Copilot take one comma-separated list of paths.** A copy whose path holds a comma is left out of those notes, with a warning.
 - **Tested so far in Claude Code only.** The Cursor, Copilot and `AGENTS.md` notes follow each tool's documentation, read on 2026-11-15.
 
+Saved presets live in their own file, `seams.settings.json`, not in `seams.json`, so an older checker copy in CI never sees them. [presets.md](presets.md#saving-a-preset) explains it.
+
 When the notes fall behind `seams.json`, the plain check fails in CI. When you drop a value from `"notes"`, `seams notes` removes its notes. It never touches a file it did not write.
 
 The full loop:
