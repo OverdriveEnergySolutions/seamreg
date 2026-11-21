@@ -430,29 +430,18 @@ def cmd_run(args):
                       "with seams.json.", file=sys.stderr)
                 return 2
             est = row["diff"] if args.diff else row["full"]
-            if est["agents"] is None:
-                print("seams: this run's cost is not measured for these settings. Ask the user for a ceiling "
-                      "and pass it with --ceiling.", file=sys.stderr)
-                if args.ceiling is None:
-                    return 2
-            # A step with no measured rate reserves an even share of the ceiling per packet, never zero.
-            per = {s: v["per_packet"] if v["per_packet"]
-                   else round((args.ceiling or 0) / max(1, v["packets"]), 2) for s, v in est["steps"].items()}
-            run = spend.start(out, row["settings"], est["agents"] if est["agents"] is not None else args.ceiling,
-                             per, args.ceiling)
+            # An agent whose cost cannot be read counts at its step's per-packet estimate (0 when unmeasured).
+            per = {s: v["per_packet"] or 0 for s, v in est["steps"].items()}
+            run = spend.start(out, row["settings"], est["agents"], per)
             print(json.dumps(run, indent=1) if args.json else
-                  f"run {run['id']}: {run['preset']}, estimate ${run['estimate']:,.2f}, ceiling ${run['ceiling']:,.2f}")
-        elif args.action == "raise":
-            if args.to is None:
-                print("seams: give the new ceiling in dollars: --to 40", file=sys.stderr)
-                return 2
-            run = spend.raise_ceiling(out, args.to)
-            print(f"run {run['id']}: ceiling ${run['ceiling']:,.2f}")
+                  f"run {run['id']}: {run['preset']}, estimate {_dollars(run['estimate'])}. Start each agent at "
+                  "its step's model and effort: " + ", ".join(f"{presets.STEP_TEXT[s]} {v['model']} at {v['effort']}"
+                                                            for s, v in run["settings"].items()) + ".")
         else:
             st = spend.finish(out, "stopped" if args.action == "stop" else "finished")
             print(json.dumps(st, indent=1) if args.json else
                   f"run {st['run']} {'stopped' if args.action == 'stop' else 'finished'}: ${st['recorded']:,.2f} "
-                  f"spent against an estimate of ${st['estimate']:,.2f}" + _spend_notes(st) + ".")
+                  f"spent against an estimate of {_dollars(st['estimate'])}" + _spend_notes(st) + ".")
     except spend.OpenRun as e:
         st = e.state
         print(f"seams: run {st['run']} is still open (${st['recorded']:,.2f} spent). Report it, then close it "
@@ -466,12 +455,16 @@ def cmd_run(args):
     return 0
 
 
+def _dollars(x):
+    return "not measured" if x is None else f"${x:,.2f}"
+
+
 def _spend_notes(st):
     """What the spend text adds after the dollars: agents still running, costs not known, and agents
     that ran on another model or effort than the preset."""
     notes = []
-    if st["reserved"]:
-        notes.append(f"${st['reserved']:,.2f} reserved for agents still running")
+    if st["running"]:
+        notes.append(f"{st['running']} agent(s) still running")
     if st["unknown"]:
         notes.append(f"{len(st['unknown'])} agent(s) with cost unknown, counted at the estimate")
     for setting in ("model", "effort"):
@@ -489,8 +482,8 @@ def cmd_spend(args):
     elif st["run"] is None:
         print("No run is open.")
     else:
-        print(f"run {st['run']} ({st['preset']}): ${st['recorded']:,.2f} spent, ceiling ${st['ceiling']:,.2f}, "
-              f"{len(st['agents'])} agent(s) finished" + _spend_notes(st) + ".")
+        print(f"run {st['run']} ({st['preset']}): ${st['recorded']:,.2f} spent against an estimate of "
+              f"{_dollars(st['estimate'])}, {len(st['agents'])} agent(s) finished" + _spend_notes(st) + ".")
     return 0
 
 
@@ -811,19 +804,17 @@ def build_parser():
     p.add_argument("--json", action="store_true", help="print JSON, for the review skill")
     p.set_defaults(func=cmd_presets)
 
-    p = sub.add_parser("run", help="open, raise, stop or finish the record of a paid run")
-    p.add_argument("action", choices=["start", "raise", "stop", "finish"])
+    p = sub.add_parser("run", help="open, stop or finish the record of a paid run")
+    p.add_argument("action", choices=["start", "stop", "finish"])
     p.add_argument("--root", default=".")
     p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
     p.add_argument("--preset", choices=list(checker.PRESETS), help="with start: the preset the user chose")
     p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE", help="with start: this run's changes")
     p.add_argument("--diff", action="store_true", help="with start: a diff scan, priced on the new leads only")
-    p.add_argument("--ceiling", type=float, help="with start: the ceiling in dollars, when not the estimate")
-    p.add_argument("--to", type=float, help="with raise: the new ceiling in dollars")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_run)
 
-    p = sub.add_parser("spend", help="the open run's spend so far, against its ceiling")
+    p = sub.add_parser("spend", help="the open run's spend so far, against its estimate")
     p.add_argument("--root", default=".")
     p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
     p.add_argument("--json", action="store_true")

@@ -191,17 +191,22 @@ def test_no_scan_yet_says_to_scan(tmp_path, capsys):
     assert "seams scan" in capsys.readouterr().err
 
 
-def test_run_start_records_the_estimate_as_its_ceiling(tmp_path, capsys):
+def test_run_start_records_the_estimate_and_each_steps_settings(tmp_path, capsys):
     root = scanned(tmp_path)
     capsys.readouterr()
     assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--json"]) == 0
     run = json.loads(capsys.readouterr().out)
-    assert run["ceiling"] == run["estimate"] > 0 and run["preset"] == "standard"
+    assert run["estimate"] > 0 and run["preset"] == "standard" and "ceiling" not in run
     assert set(run["per_packet"]) == set(check.STEPS)
+    assert run["settings"]["lead_check"] == {"model": "sonnet", "effort": "high"}
+    spend.finish(root / ".seams-scan", "stopped")
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard"]) == 0
+    assert "lead check sonnet at high" in capsys.readouterr().out
 
 
-def test_a_step_estimated_at_no_packets_still_reserves_one_packet():
+def test_a_step_estimated_at_no_packets_still_has_a_per_packet_cost():
     # A small repo estimates no drift check, but the reviewers may still record seams that need one.
+    # An agent of that step whose cost cannot be read counts at this figure.
     work = {"review": 4000, "lead_check": 10, "drift_check": 0, "rerate": 2,
             "packets": {"review": 1, "lead_check": 1, "drift_check": 0, "rerate": 1}}
     st = presets.estimate(presets.plain(presets.resolve("standard")), work)["steps"]["drift_check"]
@@ -236,13 +241,6 @@ def test_run_start_needs_a_preset_and_refuses_a_second_open_run(tmp_path, capsys
     assert cli.main(["run", "start", "--root", str(root), "--preset", "standard"]) == 0
     assert cli.main(["run", "start", "--root", str(root), "--preset", "all-in"]) == 2
     assert "still open" in capsys.readouterr().err
-
-
-def test_an_unmeasured_run_without_a_ceiling_does_not_start(tmp_path, capsys):
-    root = scanned(tmp_path)
-    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard",
-                     "--set", "lead_check.model=haiku"]) == 2
-    assert "--ceiling" in capsys.readouterr().err and spend.open_run(root / ".seams-scan") is None
 
 
 def test_an_empty_registry_from_init_is_a_first_review(tmp_path, capsys):

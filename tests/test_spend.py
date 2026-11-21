@@ -1,5 +1,5 @@
 """The run record and real spend: what a paid run costs, counted from the agents' own transcripts,
-and the dispatch check that holds a run under its ceiling."""
+and the dispatch check that starts every seamreg agent at its step's model and effort."""
 from __future__ import annotations
 
 import json
@@ -18,6 +18,7 @@ PRICES = {"claude-sonnet-5-5": (3.0, 15.0, 3.75, 6.0, 0.30), "claude-opus-5-5": 
 @pytest.fixture(autouse=True)
 def prices(monkeypatch):
     monkeypatch.setattr(presets, "PRICES", PRICES)
+    monkeypatch.delenv("CLAUDE_CODE_EFFORT_LEVEL", raising=False)  # it would refuse every start
 
 
 def dollars(u, p):
@@ -60,9 +61,9 @@ def settings(name="standard"):
     return presets.resolve(name)
 
 
-def start(out, ceiling=10.0, per_packet=None, name="standard"):
+def start(out, estimate=10.0, per_packet=None, name="standard"):
     per = per_packet or {s: 1.0 for s in presets.STEPS}
-    return spend.start(out, settings(name), estimate=ceiling, per_packet=per)
+    return spend.start(out, settings(name), estimate=estimate, per_packet=per)
 
 
 def stop_payload(tmp_path, agent="seam-lead-checker", fixture="split-message.jsonl", session="sess-A", aid="a1"):
@@ -70,9 +71,12 @@ def stop_payload(tmp_path, agent="seam-lead-checker", fixture="split-message.jso
             "agent_type": agent, "agent_transcript_path": str(FIX / fixture)}
 
 
-def pre_payload(tmp_path, agent="seam-lead-checker", session="sess-A"):
+def pre_payload(tmp_path, agent="seam-lead-checker", session="sess-A", preset="standard", **override):
+    """An Agent call at the preset's model and effort for the agent's step, unless overridden."""
+    want = presets.DEFINITIONS[preset].get(spend._step(agent) or "", {})
+    tool_input = {"subagent_type": agent, "description": "d", "prompt": "p", **want, **override}
     return {"hook_event_name": "PreToolUse", "session_id": session, "cwd": str(tmp_path), "tool_name": "Agent",
-            "tool_input": {"subagent_type": agent, "description": "d", "prompt": "p"}}
+            "tool_input": {k: v for k, v in tool_input.items() if v is not None}}
 
 
 def repo(tmp_path):
@@ -108,7 +112,7 @@ def test_a_finished_agent_adds_its_cost_model_and_effort(tmp_path):
     st = spend.state(out)
     [a] = st["agents"]
     assert a["step"] == "lead_check" and a["efforts"] == ["high"] and a["dollars"] > 0
-    assert st["reserved"] == 0 and st["differences"] == []
+    assert st["running"] == 0 and st["differences"] == []
 
 
 def test_an_agent_at_another_effort_is_reported_as_a_difference(tmp_path):
@@ -148,7 +152,7 @@ def test_with_no_open_run_the_hooks_do_nothing(tmp_path):
 
 def test_records_written_together_both_survive(tmp_path):
     root, out = repo(tmp_path)
-    start(out, ceiling=100)
+    start(out)
     spend.on_pre_tool_use(pre_payload(root))
     spend.on_subagent_stop(stop_payload(root, aid="a1"))
     spend.on_pre_tool_use(pre_payload(root))
@@ -169,61 +173,92 @@ def test_a_damaged_header_is_set_aside(tmp_path):
 
 # --- the dispatch check -------------------------------------------------------
 
-def test_dispatch_past_the_ceiling_is_refused_and_names_it(tmp_path):
+def reason(got):
+    return got["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_start_at_the_steps_model_and_effort_is_let_through(tmp_path):
     root, out = repo(tmp_path)
-    start(out, ceiling=1.6, per_packet={s: 1.5 for s in presets.STEPS})
-    assert not denied(spend.on_pre_tool_use(pre_payload(root)))
-    spend.on_subagent_stop(stop_payload(root))  # $0.15 spent: 0.15 + 1.50 passes 1.60
+    start(out)
+    for agent in ("seam-reviewer", "seam-drift-checker", "seam-lead-checker", "seam-risk-rater"):
+        assert spend.on_pre_tool_use(pre_payload(root, agent=agent)) is None
+    assert spend.state(out)["running"] == 4
+
+
+def test_a_start_on_another_model_is_refused_and_names_the_right_one(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    got = spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer", model="opus"))
+    assert denied(got) and "'sonnet'" in reason(got) and "'max'" in reason(got) and "'opus'" in reason(got)
+    assert spend.state(out)["running"] == 0
+
+
+def test_a_start_at_another_effort_is_refused(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    got = spend.on_pre_tool_use(pre_payload(root, effort="max"))  # standard's lead check runs at high
+    assert denied(got) and "'high'" in reason(got)
+
+
+def test_a_start_that_leaves_out_the_model_or_the_effort_is_refused(tmp_path):
+    # Left out, the model is inherited from the session and the effort comes from the agent file.
+    root, out = repo(tmp_path)
+    start(out)
+    assert "no model" in reason(spend.on_pre_tool_use(pre_payload(root, model=None)))
+    assert "no effort" in reason(spend.on_pre_tool_use(pre_payload(root, effort=None)))
+
+
+def test_the_model_may_be_named_by_its_full_id(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    assert spend.on_pre_tool_use(pre_payload(root, model=presets.MODEL_IDS["sonnet"])) is None
+
+
+def test_all_in_is_held_to_its_own_settings(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, name="all-in")
+    assert denied(spend.on_pre_tool_use(pre_payload(root)))  # standard's lead check effort, high
+    assert spend.on_pre_tool_use(pre_payload(root, preset="all-in")) is None
+
+
+def test_an_effort_override_in_the_environment_is_refused(tmp_path, monkeypatch):
+    root, out = repo(tmp_path)
+    start(out)
+    monkeypatch.setenv("CLAUDE_CODE_EFFORT_LEVEL", "max")
     got = spend.on_pre_tool_use(pre_payload(root))
-    assert denied(got) and "$1.60" in got["hookSpecificOutput"]["permissionDecisionReason"]
+    assert denied(got) and "CLAUDE_CODE_EFFORT_LEVEL" in reason(got)
+    monkeypatch.setenv("CLAUDE_CODE_EFFORT_LEVEL", "high")  # the same as the step's effort
+    assert spend.on_pre_tool_use(pre_payload(root)) is None
 
 
-def test_a_raise_lets_the_next_dispatch_through(tmp_path):
+def test_spend_past_the_estimate_never_refuses_a_start(tmp_path):
     root, out = repo(tmp_path)
-    start(out, ceiling=1.6, per_packet={s: 1.5 for s in presets.STEPS})
+    start(out, estimate=0.01)
     spend.on_pre_tool_use(pre_payload(root))
     spend.on_subagent_stop(stop_payload(root))
-    assert denied(spend.on_pre_tool_use(pre_payload(root)))
-    spend.raise_ceiling(out, 10.0)
-    assert not denied(spend.on_pre_tool_use(pre_payload(root)))
-
-
-def test_reservations_fill_the_room_with_no_agent_finished(tmp_path):
-    root, out = repo(tmp_path)
-    start(out, ceiling=5.0, per_packet={s: 1.0 for s in presets.STEPS})
-    spend.on_pre_tool_use(pre_payload(root))
-    spend.on_subagent_stop(stop_payload(root, aid="first"))  # the step's first packet is done
-    results = [denied(spend.on_pre_tool_use(pre_payload(root))) for _ in range(10)]
-    assert results.count(False) >= 1 and results[-1] is True
-    spend.on_subagent_stop(stop_payload(root, aid="second"))
-    assert spend.state(out)["reserved"] < sum(1 for r in results if not r)
-
-
-def test_a_steps_second_agent_waits_for_the_first_record(tmp_path):
-    root, out = repo(tmp_path)
-    start(out, ceiling=100)
-    assert not denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")))
-    got = spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))
-    assert denied(got) and "first" in got["hookSpecificOutput"]["permissionDecisionReason"]
+    assert spend.state(out)["over_estimate"] is True
+    assert [spend.on_pre_tool_use(pre_payload(root)) for _ in range(5)] == [None] * 5
 
 
 def test_a_plugin_prefixed_agent_type_counts(tmp_path):
     root, out = repo(tmp_path)
-    start(out, ceiling=100)
-    spend.on_pre_tool_use(pre_payload(root, agent="seams:seam-reviewer"))
-    assert spend.state(out)["reserved"] > 0
+    start(out)
+    assert spend.on_pre_tool_use(pre_payload(root, agent="seams:seam-reviewer")) is None
+    assert spend.state(out)["running"] == 1
+    assert denied(spend.on_pre_tool_use(pre_payload(root, agent="seams:seam-reviewer", model="opus")))
 
 
 # --- the commands --------------------------------------------------------
 
 def test_run_and_spend_commands_print_json(tmp_path, capsys):
     root, out = repo(tmp_path)
-    start(out, ceiling=7.5)
+    start(out, estimate=7.5)
     capsys.readouterr()
     assert cli.main(["spend", "--root", str(root), "--json"]) == 0
     st = json.loads(capsys.readouterr().out)
-    assert st["ceiling"] == 7.5 and st["over"] is False
-    assert cli.main(["run", "raise", "--root", str(root), "--to", "12"]) == 0
+    assert st["estimate"] == 7.5 and st["over_estimate"] is False and "ceiling" not in st
+    assert cli.main(["spend", "--root", str(root)]) == 0
+    assert "against an estimate of $7.50" in capsys.readouterr().out
     assert cli.main(["run", "finish", "--root", str(root)]) == 0
     assert spend.last_finished(out)["fingerprint"] == presets.fingerprint("standard")
 
@@ -243,19 +278,19 @@ def _run_hook(event, payload, plugin_root=ROOT):
     import subprocess
     env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(plugin_root)}
     env.pop("PYTHONPATH", None)
+    env.pop("CLAUDE_CODE_EFFORT_LEVEL", None)
     return subprocess.run(["bash", "-c", _hook_command(event)], input=json.dumps(payload), env=env,
                           capture_output=True, text=True, timeout=30)
 
 
 def test_the_hook_commands_record_and_refuse_from_the_plugins_own_code(tmp_path):
     root, out = repo(tmp_path)
-    start(out, ceiling=0.45, per_packet={s: 0.4 for s in presets.STEPS})
+    start(out)
     first = _run_hook("PreToolUse", pre_payload(root))
     assert first.returncode == 0 and first.stdout == ""
     stop = _run_hook("SubagentStop", stop_payload(root))
     assert stop.returncode == 0
-    # The child process prices the agent with the real table: $0.09, so 0.40 more passes 0.45.
-    refused = _run_hook("PreToolUse", pre_payload(root))
+    refused = _run_hook("PreToolUse", pre_payload(root, model="opus"))
     assert json.loads(refused.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert len(spend.state(out)["agents"]) == 1
 
@@ -278,17 +313,18 @@ def test_a_one_hour_cache_write_costs_more_than_a_five_minute_one(tmp_path):
 
 
 @pytest.mark.parametrize("flock", [True, False], ids=["flock", "lock-file"])
-def test_starts_at_the_same_moment_still_let_only_the_first_through(tmp_path, monkeypatch, flock):
-    # Agents started in one message get their hooks run side by side. A pause between reading the
-    # record and writing the reservation makes the race certain without a lock.
+def test_starts_at_the_same_moment_bind_the_run_once_and_all_count(tmp_path, monkeypatch, flock):
+    # Agents started in one message get their hooks run side by side. A pause while binding the run to
+    # its session makes the race certain without a lock.
     import threading
     import time
     if not flock:  # Windows has no flock: the lock is a file made with O_EXCL
         monkeypatch.setattr(spend, "fcntl", None)
     root, out = repo(tmp_path)
-    start(out, ceiling=100)
+    start(out)
+    binds = []
     real_bound = spend._bound
-    monkeypatch.setattr(spend, "_bound", lambda *a, **k: (time.sleep(0.05), real_bound(*a, **k))[1])
+    monkeypatch.setattr(spend, "_bound", lambda *a, **k: (binds.append(1), time.sleep(0.05), real_bound(*a, **k))[2])
     results, gate = [], threading.Barrier(8)
 
     def go():
@@ -300,7 +336,7 @@ def test_starts_at_the_same_moment_still_let_only_the_first_through(tmp_path, mo
         t.start()
     for t in threads:
         t.join()
-    assert results.count(False) == 1
+    assert results.count(False) == 8 and len(binds) == 1 and spend.state(out)["running"] == 8
 
 
 def test_the_hook_ignores_a_seams_package_in_the_repo(tmp_path):
@@ -317,24 +353,24 @@ def test_the_hook_ignores_a_seams_package_in_the_repo(tmp_path):
     got = subprocess.run(["bash", "-c", _hook_command("PreToolUse")], input=json.dumps(pre_payload(root)),
                          env=env, cwd=root, capture_output=True, text=True, timeout=30)
     assert got.returncode == 0 and not (root / "HIJACKED").exists()
-    assert spend.state(out)["reserved"] > 0
+    assert spend.state(out)["running"] == 1
 
 
-def test_an_unmeasured_step_reserves_a_share_of_the_ceiling(tmp_path, capsys):
+def test_an_unmeasured_run_starts_and_reports_its_estimate_as_not_measured(tmp_path, capsys):
     import shutil
     root = tmp_path / "repo"
     shutil.copytree(ROOT / "tests" / "fixtures" / "toy-repo", root)
     (root / "seams.json").unlink(missing_ok=True)
     assert cli.main(["scan", "--root", str(root)]) == 0
     capsys.readouterr()
-    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--set", "lead_check.model=haiku",
-                     "--ceiling", "20", "--json"]) == 0
-    run = json.loads(capsys.readouterr().out)
-    assert run["per_packet"]["lead_check"] > 0
+    assert cli.main(["run", "start", "--root", str(root), "--preset", "standard", "--set", "lead_check.model=haiku"]) == 0
+    assert "not measured" in capsys.readouterr().out
+    run = spend.open_run(root / ".seams-scan")
+    assert run["estimate"] is None and run["settings"]["lead_check"]["model"] == "haiku"
 
 
 def test_a_start_is_refused_when_the_record_stays_locked(tmp_path, monkeypatch):
-    # Failing open here would let a start through unchecked.
+    # Failing open here would let a start through unrecorded.
     import contextlib
     root, out = repo(tmp_path)
     start(out)
@@ -362,7 +398,7 @@ def test_a_finished_agent_is_recorded_even_when_the_record_stays_locked(tmp_path
     monkeypatch.setattr(spend, "_locked", stuck)
     spend.on_subagent_stop(stop_payload(root))
     st = spend.state(out)
-    assert len(st["agents"]) == 1 and st["reserved"] > 0  # the reservation stays: stop early, not late
+    assert len(st["agents"]) == 1 and st["running"] == 1  # still marked as running: finish asks for a stop
 
 
 def test_a_lock_held_by_another_process_waits_and_is_never_broken(tmp_path):
@@ -397,7 +433,7 @@ def test_a_lock_file_left_by_a_dead_hook_is_taken_over(tmp_path, monkeypatch):
     assert not (folder / ".lock").exists()
 
 
-# --- review fixes: each one a way a run could pass its ceiling unseen -----------------
+# --- review fixes: each one a way a run could be recorded wrong -----------------
 
 def _transcript(tmp_path, name, lines):
     path = tmp_path / name
@@ -425,28 +461,9 @@ def _stop_with(tmp_path, root, aid, dollars_out, agent="seam-reviewer", model="c
     spend.on_subagent_stop(payload)
 
 
-def test_an_over_cost_first_packet_raises_the_rest_of_the_steps_reservations(tmp_path):
-    root, out = subrepo(tmp_path, "r")
-    start(out, ceiling=10.0, per_packet={s: 1.0 for s in presets.STEPS})
-    assert not denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")))
-    _stop_with(tmp_path, root, "first", 200_000)  # $3.00 at the test price, against a $1.00 estimate
-    got = [denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))) for _ in range(5)]
-    assert got == [False, False, True, True, True]  # 3 spent + 3 + 3 = 9; one more would pass 10
-    assert spend.state(out)["reserved"] == pytest.approx(6.0)
-
-
-def test_a_step_with_a_zero_estimate_reserves_its_first_agents_real_cost(tmp_path):
-    root, out = subrepo(tmp_path, "r")
-    start(out, ceiling=10.0, per_packet={**{s: 1.0 for s in presets.STEPS}, "drift_check": 0.0})
-    spend.on_pre_tool_use(pre_payload(root, agent="seam-drift-checker"))
-    _stop_with(tmp_path, root, "first", 200_000, agent="seam-drift-checker")
-    got = [denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-drift-checker"))) for _ in range(4)]
-    assert got == [False, False, True, True]
-
-
 def test_an_agent_on_another_model_is_reported_as_a_difference(tmp_path):
     root, out = subrepo(tmp_path, "r")
-    start(out, ceiling=100)
+    start(out)
     spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))
     _stop_with(tmp_path, root, "a1", 1000, model="claude-opus-5-5")  # standard reviews on Sonnet
     [d] = spend.state(out)["differences"]
@@ -462,17 +479,17 @@ def test_finish_waits_for_running_agents(tmp_path):
     assert spend.open_run(out) is not None
 
 
-def test_a_stop_counts_running_agents_and_still_records_them(tmp_path):
+def test_a_stop_closes_with_agents_running_and_still_records_them(tmp_path):
     root, out = subrepo(tmp_path, "r")
-    start(out, per_packet={s: 1.0 for s in presets.STEPS})
+    start(out)
     spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))
     st = spend.finish(out, "stopped")
-    assert st["status"] == "stopped" and spend.last_finished(out)["actual"] == pytest.approx(1.0)
+    assert st["status"] == "stopped" and spend.last_finished(out)["running"] == 1
     _stop_with(tmp_path, root, "late", 200_000)  # it ends after the stop, at $3.00
     run = spend.last_finished(out)
     st = spend.state(out, run)
     assert [a["agent_id"] for a in st["agents"]] == ["late"] and st["recorded"] == pytest.approx(3.0)
-    assert st["reserved"] == 0
+    assert st["running"] == 0
 
 
 def test_the_stop_command_closes_the_run_as_stopped(tmp_path, capsys):
@@ -489,7 +506,7 @@ def test_a_start_from_another_session_is_not_charged_to_the_run(tmp_path):
     start(out)
     spend.on_pre_tool_use(pre_payload(root, session="sess-A"))  # binds the run
     assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer", session="sess-B")) is None
-    assert spend.state(out)["reserved"] == pytest.approx(1.0)
+    assert spend.state(out)["running"] == 1
 
 
 @pytest.mark.parametrize("bad_id", ["ABSOLUTE", "../../../outside"])
@@ -502,7 +519,7 @@ def test_a_planted_run_record_cannot_send_the_hooks_outside_the_record(tmp_path,
     run_id = str(victim) if bad_id == "ABSOLUTE" else bad_id
     (out / "runs").mkdir(parents=True)
     (out / "runs" / "runs.json").write_text(json.dumps({"runs": [
-        {"id": run_id, "status": "open", "ceiling": 1e6, "per_packet": {"review": 0.01}, "settings": {}}]}))
+        {"id": run_id, "status": "open", "per_packet": {"review": 0.01}, "settings": {}}]}))
     assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")) is None
     assert spend.on_subagent_stop(stop_payload(root, agent="seam-reviewer")) is None
     assert sorted(p.name for p in victim.iterdir()) == ["session.json"]
@@ -527,7 +544,7 @@ def test_a_symlinked_run_record_cannot_send_the_hooks_outside_the_record(tmp_pat
     victim.mkdir()
     (victim / "session.json").write_text('{"keep": "me"}')
     run_id = "20261120-000000-abcdef"
-    record = json.dumps({"runs": [{"id": run_id, "status": "open", "ceiling": 1e6,
+    record = json.dumps({"runs": [{"id": run_id, "status": "open",
                                    "per_packet": {"review": 0.01}, "settings": {}}]})
     if level == "run folder":
         (out / "runs").mkdir(parents=True)
@@ -549,13 +566,13 @@ def test_a_symlinked_run_record_cannot_send_the_hooks_outside_the_record(tmp_pat
     assert (victim / "session.json").read_text() == '{"keep": "me"}'
 
 
-def test_a_first_review_with_no_registry_yet_is_still_held_and_recorded(tmp_path):
+def test_a_first_review_with_no_registry_yet_is_still_checked_and_recorded(tmp_path):
     # A first review starts its agents before seams.json exists. The run record alone finds the run.
     root, out = tmp_path, tmp_path / ".seams-scan"
-    start(out, ceiling=1.6, per_packet={s: 1.5 for s in presets.STEPS})
+    start(out)
     sub = root / "src"
     sub.mkdir()
-    assert not denied(spend.on_pre_tool_use(pre_payload(sub)))  # the session may work in a subfolder
+    assert spend.on_pre_tool_use(pre_payload(sub)) is None  # the session may work in a subfolder
     spend.on_subagent_stop(stop_payload(sub))
     assert len(spend.state(out)["agents"]) == 1
-    assert denied(spend.on_pre_tool_use(pre_payload(root)))
+    assert denied(spend.on_pre_tool_use(pre_payload(root, model="opus")))

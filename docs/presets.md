@@ -28,20 +28,18 @@ A lead check without a review was the candidate for a cheap way in. Measured end
 ## What the estimate counts
 
 - **The agents.** The estimate prices each step's work at a rate measured on earlier runs (the table below). During a run, a hook adds up what each agent really cost from its own transcript, and the skill reports the two side by side at the end.
-- **Not the session that runs them.** The agent you talk to also spends while it orchestrates. On first reviews that was 11 to 15% of the total. `seams presets` shows it on its own line, and the ceiling does not count it.
-- **A setting with no measurement** is estimated from the nearest measured one, and errs high: an effort above every measured one takes the highest measured rate times 35, the largest jump measured from high to max. The text says "not measured at this effort". The first packet's real cost then corrects it.
+- **Not the session that runs them.** The agent you talk to also spends while it orchestrates. On first reviews that was 11 to 15% of the total. `seams presets` shows it on its own line, and the run record does not count it.
+- **A setting with no measurement** is estimated from the nearest measured one, and errs high: an effort above every measured one takes the highest measured rate times 35, the largest jump measured from high to max. The text says "not measured at this effort". A model with no measurement at all has no estimate: the text says "not measured".
 
-## The ceiling
+## Model and effort are enforced, spend is not capped
 
-`seams run start` opens a record of the run, and its estimate becomes the run's ceiling. Before each seamreg agent starts, a plugin hook reserves that packet's estimated cost. It refuses the start when spend so far, plus the agents still running, plus this packet, would pass the ceiling. It also holds a step's second agent until the first one finishes. After that, each start of the step reserves the step's per-packet estimate or the costliest packet of the step so far, whichever is higher. So a first packet that cost more than its estimate raises what the rest of the batch reserves. A step the estimate gave no packets (a small repo can show no drift check) still reserves one full packet per start.
+`seams run start` opens a record of the run with its preset, its settings and its estimate. Before each seamreg agent starts, a plugin hook checks the Agent call: it must name the model and the effort the run's settings give that agent's step. A call that names another model or effort, or leaves either out, is refused, and the refusal names the right ones. So a review on standard cannot run on Opus by mistake, and a lead check cannot inherit max effort from the session. That mistake once cost $129.54, where the same lead check at high cost $4.44. The hook also refuses every start while `CLAUDE_CODE_EFFORT_LEVEL` would override the step's effort.
 
-When a start is refused, the skill shows you what has been spent and asks. Only your yes raises the ceiling (`seams run raise --to <dollars>`). A run with nobody to ask, such as a benchmark or CI run, stops there and reports what finished and what did not.
+The run's spend is recorded, and reported against the estimate, but never capped. A cap set from the estimate stops runs half done: on a 555-file repo, standard's drift check had 15 packets to check where the estimate, made before the review, counted 7. Some repos need more than any estimate, and the price of each step comes from the model and effort, which the hook holds. When a run passes its estimate, the skill tells you at its next report and goes on.
 
-A run ends at most one batch past its ceiling, because agents already running cannot be stopped.
+When a seamreg agent ends, a second hook prices it from its own transcript. `seams spend` and the end of a run list each agent that still ran on another model or effort than the preset (Claude Code can apply a setting the call did not name), and each agent whose cost is not known, which counts at its step's per-packet estimate.
 
-`seams run finish` waits until every agent has finished. `seams run stop` closes the run at once: agents still running count at their reservations, and each one's real cost is still recorded when it ends. `seams spend` and the end of a run list each agent that ran on another model or effort than the preset. They also list each agent whose cost is not known, which counts at the step's estimate.
-
-When a setting has no measured rate at all (a model with no measurement), `seams run start` asks for a ceiling instead of making one up: pass `--ceiling <dollars>`. Each step with no rate then reserves an even share of that ceiling per packet.
+`seams run finish` waits until every agent has finished. `seams run stop` closes the run at once, and each agent still running is recorded when it ends.
 
 ## Saving a preset
 
@@ -99,6 +97,6 @@ Most rates rest on one or two runs. A review packet costs mostly a fixed amount,
 
 ## Limits
 
-- **Claude Code only, in full.** The ceiling and the spend record need Claude Code's plugin hooks and per-agent effort (Claude Code v2.1.292 or later). In other agents the skill passes the model and the effort in words, and it cannot record spend. It tells you so after the first agent.
+- **Claude Code only, in full.** The model and effort check and the spend record need Claude Code's plugin hooks and per-agent effort (Claude Code v2.1.292 or later). In other agents the skill passes the model and the effort in words, and it cannot record spend. It tells you so after the first agent.
 - **`CLAUDE_CODE_EFFORT_LEVEL` overrides every preset effort.** The skill warns when it is set, and the run record shows the effort each agent really ran at.
 - **One calibration repo.** If a run's actual cost lands more than 30% from its estimate, please report it with the run's `seams spend --json`. That is how the rates get better: see [CONTRIBUTING.md](../CONTRIBUTING.md).

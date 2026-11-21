@@ -1,5 +1,5 @@
 {
-  "description": "seamreg: record what each seamreg agent really costs during a paid run, and refuse a start that would pass the run's ceiling. Both do nothing outside an open run.",
+  "description": "seamreg: during a paid run, refuse a seamreg agent that does not start at its step's model and effort, and record what each one really costs. Both do nothing outside an open run.",
   "hooks": {
     "PreToolUse": [
       {

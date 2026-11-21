@@ -173,7 +173,7 @@ A **preset** names the model and the effort for each paid step: the review, the 
 and the risk re-rating. There are two, standard and all-in. `seams presets` shows both with this repo's
 estimated cost. The **settings file**, `seams.settings.json`, holds the preset a team saved and only the
 settings it changed. A **run record** (`.seams-scan/runs/`) holds one paid run: its preset, its estimate
-and ceiling, and what each agent really cost and the effort it ran at. [presets.md](presets.md) explains
+and what each agent really cost and the model and effort it ran at. [presets.md](presets.md) explains
 them.
 
 ### Merge, plan and apply

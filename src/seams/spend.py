@@ -1,14 +1,15 @@
 """The run record and real spend for a paid seamreg run.
 
-`seams run start` opens a run with its preset, settings, estimate and ceiling. Two plugin hooks
-then watch it:
+`seams run start` opens a run with its preset, settings and estimate. Two plugin hooks then watch it:
 
-- Before each seamreg agent starts (PreToolUse on the Agent tool), the run reserves that packet's
-  estimate, and refuses the start when recorded spend plus open reservations would pass the
-  ceiling. It also holds a step's second agent until the first one has finished, so the first
-  packet runs alone and corrects the estimate.
+- Before each seamreg agent starts (PreToolUse on the Agent tool), the hook refuses the start unless
+  the Agent call names the model and the effort the run's settings give its step. The refusal names
+  both, so the session can start the agent again with them. An allowed start is marked as running.
 - When a seamreg agent finishes (SubagentStop), its transcript gives what it really cost, with
   each message counted once, and the model and effort it ran at.
+
+Spend is recorded and reported against the estimate, never capped: some repos need more than any
+estimate, and a cap would stop a run half done.
 
 Everything lives under .seams-scan/runs/. Each record is its own file, written to a temporary
 name and renamed, so agents that finish together cannot overwrite each other. Only the parent
@@ -71,7 +72,7 @@ except ImportError:  # Windows
 @contextlib.contextmanager
 def _locked(folder, wait=8.0, stale=60.0):
     """One hook at a time per run. Agents started in one message get their hooks run side by side,
-    and each must see the reservations the others made. Raises TimeoutError after `wait` seconds."""
+    and only the first may bind the run to its session. Raises TimeoutError after `wait` seconds."""
     folder.mkdir(parents=True, exist_ok=True)
     lock = folder / ".lock"
     deadline = time.monotonic() + wait
@@ -221,7 +222,7 @@ def last_finished(out):
     return None
 
 
-def start(out, settings, estimate, per_packet, ceiling=None):
+def start(out, settings, estimate, per_packet):
     """Open a run. Refuses while another is open, carrying that run's state."""
     head = _header(out)
     if _open_of(head):
@@ -230,8 +231,7 @@ def start(out, settings, estimate, per_packet, ceiling=None):
            "status": "open", "started": _now(), "preset": settings["preset"],
            "fingerprint": settings["fingerprint"], "settings": presets.plain(settings),
            "sources": {s: {k: v["source"] for k, v in f.items()} for s, f in settings["steps"].items()},
-           "estimate": estimate, "ceiling": estimate if ceiling is None else ceiling,
-           "per_packet": per_packet}
+           "estimate": estimate, "per_packet": per_packet}
     head["runs"].append(run)
     _write(_dir(out) / HEADER, head)
     return run
@@ -247,22 +247,18 @@ def _update_open(out, **fields):
     return run
 
 
-def raise_ceiling(out, to):
-    return _update_open(out, ceiling=float(to), raised=_now())
-
-
 def finish(out, status="finished"):
-    """Close the run. A finish waits for every agent. A stop closes with agents still running:
-    their reservations count in `actual`, and each one's real cost is still recorded when it ends."""
+    """Close the run. A finish waits for every agent. A stop closes with agents still running, and
+    each one's real cost is still recorded when it ends."""
     run = open_run(out)
     if run is None:
         raise ValueError("no run is open. Start one with `seams run start`.")
     st = state(out, run)
-    running = len(_files(out, run, "res"))
+    running = len(_files(out, run, "start"))
     if running and status == "finished":
         raise ValueError(f"{running} agent(s) of run {run['id']} are still running. Wait for them to finish, "
                          "or close the run now with `seams run stop`.")
-    return state(out, _update_open(out, status=status, ended=_now(), actual=round(st["recorded"] + st["reserved"], 4),
+    return state(out, _update_open(out, status=status, ended=_now(), actual=st["recorded"],
                                    running=running))
 
 
@@ -272,12 +268,13 @@ def _files(out, run, prefix):
 
 
 def state(out, run=None):
-    """Recorded spend, open reservations, the ceiling, each agent, and model and effort differences."""
+    """Recorded spend against the estimate, agents still running, each agent, and model and effort
+    differences."""
     run = run or open_run(out)
     if run is None:
         return {"run": None}
     agents = _files(out, run, "agent")
-    reserved = sum(r["amount"] for r in _files(out, run, "res"))
+    running = len(_files(out, run, "start"))
     recorded = sum(a["counted"] for a in agents)
     diffs = []
     for a in agents:
@@ -291,8 +288,8 @@ def state(out, run=None):
                           "expected": model, "ran": a["models"]})
     session = _read(_dir(out) / run["id"] / "session.json") or {}
     return {"run": run["id"], "preset": run["preset"], "status": run["status"], "session": session.get("id"),
-            "estimate": run["estimate"], "ceiling": run["ceiling"], "recorded": round(recorded, 4),
-            "reserved": round(reserved, 4), "over": recorded + reserved > run["ceiling"],
+            "estimate": run["estimate"], "recorded": round(recorded, 4), "running": running,
+            "over_estimate": run["estimate"] is not None and recorded > run["estimate"],
             "agents": agents, "unknown": [a["agent_id"] for a in agents if a["dollars"] is None],
             "differences": diffs}
 
@@ -339,10 +336,11 @@ def _deny(reason):
 
 
 def on_pre_tool_use(payload):
-    """Reserve this packet's estimate, or refuse the start. None means allow without comment."""
+    """Refuse a seamreg agent that does not name its step's model and effort. None means allow."""
     if payload.get("tool_name") not in ("Agent", "Task"):
         return None
-    step = _step((payload.get("tool_input") or {}).get("subagent_type"))
+    tool_input = payload.get("tool_input") or {}
+    step = _step(tool_input.get("subagent_type"))
     if not step:
         return None
     out = _out_for(payload)
@@ -350,42 +348,53 @@ def on_pre_tool_use(payload):
     folder = _hook_folder(out, run) if run else None
     if folder is None:
         return None
-    try:
-        with _locked(folder):
-            return _check_and_reserve(out, run, folder, step, payload)
-    except TimeoutError:
-        return _deny("seams: the run record is busy, so this start cannot be checked against the ceiling. "
-                     "Wait a moment and start the agent again.")
-
-
-def _check_and_reserve(out, run, folder, step, payload):
     session = (_read(folder / "session.json") or {}).get("id")
     if session is not None and session != payload.get("session_id"):
         return None
-    agents, held = _files(out, run, "agent"), _files(out, run, "res")
-    recorded = sum(a["counted"] for a in agents)
-    reserved = sum(r["amount"] for r in held)
-    done = [a for a in agents if a["step"] == step]
-    waiting = [r for r in held if r["step"] == step]
-    if not done and waiting:
-        return _deny(f"seams: the first {presets.STEP_TEXT[step]} agent of this run has not finished. "
-                     "Wait for it: its real cost corrects the estimate before the rest start.")
-    # The step's costliest finished agent corrects its estimate upward, so a batch after an over-cost
-    # first packet reserves what that packet really cost.
-    amount = max([float(run["per_packet"].get(step) or 0)] + [a["counted"] for a in done])
-    if recorded + reserved + amount > run["ceiling"] + 1e-9:
-        return _deny(f"seams: this would pass the run's ceiling of ${run['ceiling']:,.2f} "
-                     f"(${recorded:,.2f} spent, ${reserved:,.2f} running). Ask the user. "
-                     "Raise it with `seams run raise --to <dollars>` only after they say yes. "
-                     "With nobody to ask, stop and report what finished and what did not.")
-    if session is None:
-        _bound(folder, payload.get("session_id"))
-    _write(folder / f"res-{uuid.uuid4().hex}.json", {"step": step, "amount": amount, "at": _now()})
+    wrong = mismatch(run, step, tool_input)
+    if wrong:
+        return _deny(wrong)
+    try:
+        with _locked(folder):
+            if (_read(folder / "session.json") or {}).get("id") is None:
+                _bound(folder, payload.get("session_id"))
+            _write(folder / f"start-{uuid.uuid4().hex}.json", {"step": step, "at": _now()})
+    except TimeoutError:
+        return _deny("seams: the run record is busy, so this start cannot be recorded. "
+                     "Wait a moment and start the agent again.")
     return None
 
 
+def _model_names(alias):
+    return {alias, presets.MODEL_IDS.get(alias)} - {None}
+
+
+def mismatch(run, step, tool_input, env=None):
+    """Why this Agent call does not run at its step's settings, or None when it does. The model may be
+    named by its alias or its full id. CLAUDE_CODE_EFFORT_LEVEL would override the call's effort."""
+    env = os.environ if env is None else env
+    want = run["settings"].get(step) or {}
+    model, effort = want.get("model"), want.get("effort")
+    got_model, got_effort = tool_input.get("model"), tool_input.get("effort")
+    wrong = []
+    if model and str(got_model or "") not in _model_names(model):
+        wrong.append(f"model {got_model!r}" if got_model else "no model")
+    if effort and str(got_effort or "") != effort:
+        wrong.append(f"effort {got_effort!r}" if got_effort else "no effort")
+    override = env.get("CLAUDE_CODE_EFFORT_LEVEL")
+    if not wrong and effort and override and override != effort:
+        return (f"seams: CLAUDE_CODE_EFFORT_LEVEL={override} overrides the effort on every agent, and this "
+                f"run's {presets.STEP_TEXT[step]} needs effort {effort!r}. Tell the user. The run cannot keep its "
+                "preset until Claude Code is restarted without that variable.")
+    if not wrong:
+        return None
+    return (f"seams: this {presets.STEP_TEXT[step]} agent must start with model {model!r} and effort {effort!r}, "
+            f"the {run['preset']} preset's settings for this step, but the call gave {' and '.join(wrong)}. "
+            "Start it again with both set on the Agent call.")
+
+
 def on_subagent_stop(payload):
-    """Record a finished seamreg agent and free one of its step's reservations."""
+    """Record a finished seamreg agent, and mark one of its step's starts as ended."""
     step = _step(payload.get("agent_type"))
     if not step:
         return None
@@ -402,7 +411,7 @@ def on_subagent_stop(payload):
         with _locked(folder):
             _record(folder, run, step, payload, cost)
     except TimeoutError:
-        # Keep the record, and leave the reservation in place: the run then stops early, never late.
+        # Keep the record. The start stays marked as running, so `seams run finish` asks for a stop.
         _record(folder, run, step, payload, cost, release=False)
     return None
 
@@ -424,7 +433,7 @@ def _record(folder, run, step, payload, cost, release=True):
               "models": cost["models"], "efforts": cost["efforts"], "tokens": cost["tokens"],
               "unpriced": cost["unpriced"]}
     _write(folder / f"agent-{aid}.json", record)
-    for res in sorted(folder.glob("res-*.json")) if release else ():
+    for res in sorted(folder.glob("start-*.json")) if release else ():
         r = _read(res)
         if isinstance(r, dict) and r.get("step") == step:
             try:
