@@ -41,6 +41,8 @@ When a seamreg agent ends, a second hook prices it from its own transcript. `sea
 
 `seams run finish` waits until every agent has finished. `seams run stop` closes the run at once, and each agent still running is recorded when it ends.
 
+The hooks act only on a run that `seams run start` opened for this user on this machine. It writes the run's id to a marker in your state folder (`$XDG_STATE_HOME/seamreg`, or `~/.local/state/seamreg`), outside the repo. A run record a repo commits is ignored.
+
 ## Saving a preset
 
 At the end of a run the skill offers to save the preset in `seams.settings.json`, beside `seams.json`. Commit it, so the whole team runs the same way. It holds the preset's name and only the settings you changed:

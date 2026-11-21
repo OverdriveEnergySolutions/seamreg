@@ -11,6 +11,10 @@
 Spend is recorded and reported against the estimate, never capped: some repos need more than any
 estimate, and a cap would stop a run half done.
 
+A target repo can commit its own .seams-scan, run record included. So `seams run start` also writes
+the run's id to a marker outside the repo, in this user's state folder, and the hooks act only on the
+run that marker names. A planted record sets no model, no effort and no text in a refusal.
+
 Everything lives under .seams-scan/runs/. Each record is its own file, written to a temporary
 name and renamed, so agents that finish together cannot overwrite each other. Only the parent
 session's agents count: the first allowed start binds the run to that session.
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -222,6 +227,21 @@ def last_finished(out):
     return None
 
 
+def _marker(out):
+    """This user's marker for the record at `out`, outside any repo: the id of the run `start` opened."""
+    base = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    key = hashlib.sha256(str(Path(out).resolve()).encode()).hexdigest()[:32]
+    return base / "seamreg" / "runs" / f"{key}.json"
+
+
+def _trusted(out, run):
+    """The run, when this user's own `seams run start` opened it here. Otherwise None."""
+    if run is None:
+        return None
+    mark = _read(_marker(out))
+    return run if isinstance(mark, dict) and mark.get("run") == run.get("id") else None
+
+
 def start(out, settings, estimate, per_packet):
     """Open a run. Refuses while another is open, carrying that run's state."""
     head = _header(out)
@@ -234,6 +254,7 @@ def start(out, settings, estimate, per_packet):
            "estimate": estimate, "per_packet": per_packet}
     head["runs"].append(run)
     _write(_dir(out) / HEADER, head)
+    _write(_marker(out), {"run": run["id"], "record": str(Path(out).resolve()), "started": run["started"]})
     return run
 
 
@@ -344,7 +365,7 @@ def on_pre_tool_use(payload):
     if not step:
         return None
     out = _out_for(payload)
-    run = open_run(out) if out else None
+    run = _trusted(out, open_run(out)) if out else None
     folder = _hook_folder(out, run) if run else None
     if folder is None:
         return None
@@ -373,8 +394,11 @@ def mismatch(run, step, tool_input, env=None):
     """Why this Agent call does not run at its step's settings, or None when it does. The model may be
     named by its alias or its full id. CLAUDE_CODE_EFFORT_LEVEL would override the call's effort."""
     env = os.environ if env is None else env
-    want = run["settings"].get(step) or {}
+    want = (run.get("settings") or {}).get(step) or {}
     model, effort = want.get("model"), want.get("effort")
+    # Only known values reach the refusal text, so the record cannot put words in it.
+    if model not in check.MODELS or effort not in check.EFFORTS or run.get("preset") not in check.PRESETS:
+        return None
     got_model, got_effort = tool_input.get("model"), tool_input.get("effort")
     wrong = []
     if model and str(got_model or "") not in _model_names(model):
@@ -399,7 +423,7 @@ def on_subagent_stop(payload):
     if not step:
         return None
     out = _out_for(payload)
-    run = _recording(out) if out else None
+    run = _trusted(out, _recording(out)) if out else None
     folder = _hook_folder(out, run) if run else None
     if folder is None:
         return None
