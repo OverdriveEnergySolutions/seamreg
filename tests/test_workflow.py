@@ -249,3 +249,12 @@ def test_merge_keeps_the_notes_setting(repo, capsys):
     put(repo, review())
     assert cli.main(["merge", "--root", str(repo), "--apply"]) == 0
     assert json.loads((repo / "seams.json").read_text())["notes"] == "rules"
+
+
+def test_review_skill_runs_presets_through_the_tool():
+    # The skill shows the choice and links the page that explains it; the tool holds the values.
+    text = (Path(merge.__file__).parents[2] / "skills/seams-review/SKILL.md").read_text()
+    for cmd in ("seams presets", "seams run start", "seams run raise", "seams run finish", "seams spend"):
+        assert cmd in text, cmd
+    assert "docs/presets.md" in text
+    assert "seams.settings.json" in text
