@@ -176,6 +176,43 @@
           "covers": "all"
         }
       ]
+    },
+    {
+      "id": "preset-effort-floors",
+      "title": "Agent effort floors and the standard preset",
+      "kind": "config",
+      "must_agree": "Each seamreg agent file's effort is the standard preset's effort for that agent's step.",
+      "copies": [
+        {
+          "path": "src/seams/presets.py",
+          "symbol": "DEFINITIONS = {"
+        },
+        {
+          "path": "agents/seam-reviewer.md",
+          "symbol": "effort:"
+        },
+        {
+          "path": "agents/seam-drift-checker.md",
+          "symbol": "effort:"
+        },
+        {
+          "path": "agents/seam-lead-checker.md",
+          "symbol": "effort:"
+        },
+        {
+          "path": "agents/seam-risk-rater.md",
+          "symbol": "effort:"
+        }
+      ],
+      "consequence": "An agent started without an explicit effort runs at a different effort than the preset was measured at, so the run costs and finds something other than what the docs promise.",
+      "ties": [
+        {
+          "path": "tests/test_agents.py",
+          "test": "test_agent_effort_floors_match_the_standard_preset",
+          "covers": "all"
+        }
+      ],
+      "risk": "medium"
     }
   ]
 }

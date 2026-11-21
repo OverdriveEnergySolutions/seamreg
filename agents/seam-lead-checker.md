@@ -2,6 +2,7 @@
 name: seam-lead-checker
 description: Checks one lead check packet that `seams split --lead-check` wrote, and writes its findings as JSON. Judges each scan lead (seam or not, and whether the copies agree). Give it the packet file's path and nothing else.
 model: sonnet
+effort: high
 tools: ["Read", "Grep", "Glob", "Bash", "Write"]
 ---
 

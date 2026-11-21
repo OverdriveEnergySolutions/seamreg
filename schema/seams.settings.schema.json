@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Seams settings",
+  "description": "The preset a team saved for paid seamreg runs, and only the settings it changed. A newer seamreg's definition of the preset applies to everything not listed here.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "preset"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "preset": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "all-in"
+      ],
+      "description": "standard or all-in. `seams presets` shows what each one runs."
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "haiku",
+                "fable"
+              ]
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          }
+        },
+        "drift_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "haiku",
+                "fable"
+              ]
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          }
+        },
+        "lead_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "haiku",
+                "fable"
+              ]
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          }
+        },
+        "rerate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "type": "string",
+              "enum": [
+                "sonnet",
+                "opus",
+                "haiku",
+                "fable"
+              ]
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          }
+        }
+      },
+      "description": "Per step, the model or effort the team set by hand."
+    },
+    "diff_limit_percent": {
+      "type": "integer",
+      "enum": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        40,
+        50,
+        75,
+        100
+      ],
+      "description": "A diff scan runs without asking while its estimate stays under this share of a full run on the same preset. Default 25."
+    }
+  }
+}

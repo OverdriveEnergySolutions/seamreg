@@ -116,3 +116,25 @@ def test_convention_leads_keep_their_slots_in_a_full_packet():
     shown = split.shown_leads({"leads": cross + conv})
     assert len(shown) == split.MAX_LEADS
     assert sum(l["kind"] == "convention" for l in shown) == 3
+
+
+def test_a_lead_only_plan_packs_only_the_areas_its_leads_touch():
+    # A first review packs every area. A diff scan with one new lead in api must not carry web and
+    # worker into the reviewer's packet just because they fit beside it.
+    doc = doc_with([("api/a.py", "api", 40), ("web/a.ts", "web", 30), ("worker/a.py", "worker", 20)],
+                   [(["api/a.py"], ["api"])])
+    [full] = split.plan(doc, max_lines=100)
+    assert sorted(full["units"]) == ["api", "web", "worker"]
+    [diff] = split.plan(doc, max_lines=100, lead_units_only=True)
+    assert diff["units"] == ["api"] and diff["lines"] == 40 and len(diff["leads"]) == 1
+
+
+def test_a_lead_only_plan_reviews_the_subfolder_of_a_large_area(monkeypatch):
+    # One new lead in a large area must not bring in the whole area: its own subfolder is enough.
+    monkeypatch.setattr(split, "LEAD_UNIT_LINES", 50)
+    doc = doc_with([("app/http/a.php", "app", 40), ("app/models/b.php", "app", 40), ("app/jobs/c.php", "app", 40)],
+                   [(["app/models/b.php"], ["app"])])
+    [full] = split.plan(doc, max_lines=200)
+    assert full["units"] == ["app"] and full["lines"] == 120
+    [diff] = split.plan(doc, max_lines=200, lead_units_only=True)
+    assert diff["units"] == ["app/models"] and diff["lines"] == 40

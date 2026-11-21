@@ -2,8 +2,12 @@
 # Run one prompt blind on a benchmark workspace, in a fresh headless Claude Code session. Every
 # benchmark kind uses this: the kind supplies the prompt, this script supplies the blindness.
 #
-#   [MODEL=claude-sonnet-5-5] [EFFORT=max] [MAX_TURNS=6] [ANSWER_FILE=f] \
+#   [PRESET=standard] [MODEL=claude-sonnet-5-5] [EFFORT=max] [MAX_TURNS=6] [ANSWER_FILE=f] [DRY_RUN=1] \
 #       bench/session.sh WORKDIR NAME PROMPT_FILE
+#
+# PRESET is the seamreg preset the session runs (standard or all-in). The default answer names it, and
+# tells the session to stop and report at the run's ceiling, never to raise it: nobody is there to say
+# yes. DRY_RUN=1 prints that answer and exits before anything starts.
 #
 # WORKDIR comes from bench/snapshot.sh. The session works in WORKDIR/blind and saves to WORKDIR/NAME/.
 # PROMPT_FILE may use @TOOL@ (the frozen tool copy) and @WORK@ (WORKDIR). It must ask the session to
@@ -23,6 +27,11 @@ NAME=${2:?a name for the output folder of this session, such as detection}
 PROMPT=$(cd "$(dirname "${3:?prompt file}")" && pwd)/$(basename "$3")
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 MODEL=${MODEL:-claude-sonnet-5-5}; EFFORT=${EFFORT:-max}; MAX_TURNS=${MAX_TURNS:-6}
+PRESET=${PRESET:-standard}
+case "$PRESET" in standard|all-in) ;; *) echo "run: PRESET must be standard or all-in, not '$PRESET'" >&2; exit 1 ;; esac
+ANSWER_DEFAULT="Yes. Use the $PRESET preset for every paid step, with each step's model and effort from the run. Do not save the preset. If a start is refused at the run's ceiling, do not raise it: nobody can approve a raise here, so stop, list what finished and what did not, and report. Skip any optional second-opinion pass. For notes or agents, your pick. Then continue to the end of the workflow."
+ANSWER=$ANSWER_DEFAULT; [ -n "${ANSWER_FILE:-}" ] && ANSWER=$(cat "$ANSWER_FILE")
+if [ "${DRY_RUN:-}" = 1 ]; then echo "preset: $PRESET"; echo "answer: $ANSWER"; exit 0; fi
 B=$W/blind; T=$W/tool; R=$W/$NAME
 [ -d "$B/.git" ] || { echo "run: no blind clone in $W (run bench/snapshot.sh first)" >&2; exit 1; }
 if [ "${RESUME:-}" = 1 ]; then
@@ -43,8 +52,6 @@ if [ ! -d "$T" ]; then  # one tool copy per workspace, so later sessions in it u
 fi
 TOOL_SHA=$(cat "$T/.bench-commit")
 
-ANSWER_DEFAULT="Yes. Take your recommended option for every choice: one seam-reviewer per packet at max effort; for the drift check, the skill's default selection at default effort, and skip any optional second-opinion pass; for notes or agents, your pick. Then continue to the end of the workflow."
-ANSWER=$ANSWER_DEFAULT; [ -n "${ANSWER_FILE:-}" ] && ANSWER=$(cat "$ANSWER_FILE")
 if [ "${RESUME:-}" = 1 ]; then
     SID=$(cat "$R/session-id")
 else
@@ -151,9 +158,9 @@ fi
 (cd "$B" && git diff > "$R/results/repo-changes.diff")
 L=$(find "$R/results" -type l | wc -l); [ "$L" -gt 0 ] && { find "$R/results" -type l -delete; log "dropped $L symlinks from the saved results"; }
 rm -rf "$R/tmp"
-python3 -I - "$R" "$MODEL" "$EFFORT" "$TOOL_SHA" "$SID" <<'PY'
+python3 -I - "$R" "$MODEL" "$EFFORT" "$TOOL_SHA" "$SID" "$PRESET" <<'PY'
 import glob, json, os, sys
-r, model, effort, tool, sid = sys.argv[1:6]
+r, model, effort, tool, sid, preset = sys.argv[1:7]
 # total_cost_usd is the session's running total, so the last turn holds the run's cost.
 turns = sorted(glob.glob(os.path.join(r, "turn*.json")), key=lambda f: int(os.path.basename(f)[4:-5]))
 cost = 0.0
@@ -162,11 +169,20 @@ for f in turns:
     except Exception: pass
 try: seams = json.load(open(os.path.join(r, "results/seams.json")))["seams"]
 except Exception: seams = []
+# The run record: what the seamreg agents cost, from their own transcripts. The session total above also
+# holds the session that ran them.
+agents_cost = None
+try:
+    runs = json.load(open(os.path.join(r, "results/seams-scan/runs/runs.json")))["runs"]
+    agents_cost = round(sum(json.load(open(f)).get("counted") or 0 for run in runs
+                            for f in glob.glob(os.path.join(r, "results/seams-scan/runs", run["id"], "agent-*.json"))), 2)
+except Exception: pass
 done = False
 try: done = "RUN COMPLETE" in (json.load(open(turns[-1])).get("result") or "")[-300:]
 except Exception: pass
-out = {"model": model, "effort": effort, "tool_commit": tool, "session_id": sid, "turns": len(turns),
-       "complete": done, "cost_usd_api_equivalent": round(cost, 2), "seams": len(seams),
+out = {"model": model, "effort": effort, "preset": preset, "tool_commit": tool, "session_id": sid, "turns": len(turns),
+       "complete": done, "cost_usd_api_equivalent": round(cost, 2), "agents_cost_usd_api_equivalent": agents_cost,
+       "seams": len(seams),
        "risk": {k: sum(s.get("risk") == k for s in seams) for k in ("high", "medium", "low")},
        "drift_claims": sum(bool(s.get("drift")) for s in seams),
        "resumes": sum("resume: session" in l for l in open(os.path.join(r, "run.log")))}

@@ -2,6 +2,7 @@
 name: seam-reviewer
 description: Reviews one packet of a repo for seams (knowledge kept in two or more files that must agree) and writes its findings as JSON. Only for packets that `seams split` wrote. Give it the packet file's path and nothing else.
 model: inherit
+effort: max
 tools: ["Read", "Grep", "Glob", "Bash", "Write"]
 ---
 

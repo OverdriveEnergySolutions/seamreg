@@ -50,9 +50,18 @@ def test_a_packet_lists_the_ties_to_check(repo):
     assert "- `a.py` (`NAMES`), covers all" in (repo / ".seams-scan/verify/packets/tied.md").read_text()
 
 
-def test_ids_and_all_override_the_default(repo):
-    assert [s["id"] for s in verify.select(check.load(repo / "seams.json"), ids={"open-medium"})] == ["open-medium"]
-    assert len(verify.select(check.load(repo / "seams.json"), every=True)) == 4
+def test_ids_narrow_the_default_and_all_takes_every_one(repo):
+    data = check.load(repo / "seams.json")
+    assert [s["id"] for s in verify.select(data, ids={"open-medium"})] == ["open-medium"]
+    assert len(verify.select(data, every=True)) == 4
+
+
+def test_ids_keep_the_default_selection_among_them(repo):
+    # A diff scan names its new seams. One that already has drift recorded needs no drift check.
+    data = check.load(repo / "seams.json")
+    assert [s["id"] for s in verify.select(data, ids={"open-high", "has-drift"})] == ["open-high"]
+    assert sorted(s["id"] for s in verify.select(data, ids={"open-high", "has-drift"}, every=True)) == \
+        ["has-drift", "open-high"]
 
 
 def test_collect_writes_new_drift_as_reading(repo):

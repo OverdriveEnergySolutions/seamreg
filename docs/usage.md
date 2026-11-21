@@ -120,6 +120,8 @@ Some things to know:
 - **Cursor and Copilot take one comma-separated list of paths.** A copy whose path holds a comma is left out of those notes, with a warning.
 - **Tested so far in Claude Code only.** The Cursor, Copilot and `AGENTS.md` notes follow each tool's documentation, read on 2026-11-15.
 
+Saved presets live in their own file, `seams.settings.json`, not in `seams.json`, so an older checker copy in CI never sees them. [presets.md](presets.md#saving-a-preset) explains it.
+
 When the notes fall behind `seams.json`, the plain check fails in CI. When you drop a value from `"notes"`, `seams notes` removes its notes. It never touches a file it did not write.
 
 The full loop:
@@ -148,7 +150,7 @@ A full review is expensive, and most of what it reads is noise it already reject
 
 ```sh
 seams scan --new                 # leads.md shows only new leads
-seams split --new-only           # packets hold only new leads; reviewers check leads, not whole areas
+seams split --new-only           # packets hold only new leads and the folders they touch
 # run the seam-reviewer agents, then:
 seams merge --apply              # writes seams.json and adds this scan's leads to the baseline
 ```
