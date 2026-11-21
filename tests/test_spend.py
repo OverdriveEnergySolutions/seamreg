@@ -547,3 +547,15 @@ def test_a_symlinked_run_record_cannot_send_the_hooks_outside_the_record(tmp_pat
     assert spend.on_subagent_stop(stop_payload(root, agent="seam-reviewer")) is None
     assert sorted(str(p.relative_to(victim)) for p in victim.rglob("*")) == before
     assert (victim / "session.json").read_text() == '{"keep": "me"}'
+
+
+def test_a_first_review_with_no_registry_yet_is_still_held_and_recorded(tmp_path):
+    # A first review starts its agents before seams.json exists. The run record alone finds the run.
+    root, out = tmp_path, tmp_path / ".seams-scan"
+    start(out, ceiling=1.6, per_packet={s: 1.5 for s in presets.STEPS})
+    sub = root / "src"
+    sub.mkdir()
+    assert not denied(spend.on_pre_tool_use(pre_payload(sub)))  # the session may work in a subfolder
+    spend.on_subagent_stop(stop_payload(sub))
+    assert len(spend.state(out)["agents"]) == 1
+    assert denied(spend.on_pre_tool_use(pre_payload(root)))

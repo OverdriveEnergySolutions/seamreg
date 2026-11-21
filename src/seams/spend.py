@@ -305,9 +305,13 @@ def _step(agent_type):
 
 
 def _out_for(payload):
+    """The run record's folder: the nearest folder at or above the session's working folder that
+    holds a run record or seams.json. A first review has a run record before it has seams.json."""
     start_dir = Path(payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ".").resolve()
-    root = check._find_root(start_dir)
-    return None if root is None else root / ".seams-scan"
+    for d in (start_dir, *start_dir.parents):
+        if (d / ".seams-scan" / RUNS / HEADER).is_file() or (d / check.REGISTRY).is_file():
+            return d / ".seams-scan"
+    return None
 
 
 def _hook_folder(out, run):
