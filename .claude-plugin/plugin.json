@@ -1,6 +1,6 @@
 {
   "name": "seams",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Find the knowledge a repo keeps in more than one place, record it in seams.json, and fail CI when the copies drift.",
   "license": "MIT",
   "keywords": [

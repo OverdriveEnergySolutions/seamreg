@@ -157,7 +157,8 @@ def cmd_notes(args):
 
 
 def cmd_schema(args):
-    text = json.dumps(checker.SCHEMA, indent=2) + "\n"
+    schema = checker.SETTINGS_SCHEMA if args.settings else checker.SCHEMA
+    text = json.dumps(schema, indent=2) + "\n"
     if args.write:
         Path(args.write).write_text(text, encoding="utf-8")
         print(f"wrote {args.write}")
@@ -731,6 +732,8 @@ def build_parser():
     p.set_defaults(func=cmd_baseline)
 
     p = sub.add_parser("schema", help="print the registry JSON Schema")
+    p.add_argument("--settings", action="store_true",
+                   help="print the schema of seams.settings.json, the saved preset, instead")
     p.add_argument("--write", metavar="PATH", help="write it to PATH instead")
     p.set_defaults(func=cmd_schema)
     return ap
