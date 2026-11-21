@@ -42,6 +42,7 @@ from seams.scan import is_new
 # non-test code, about 7 tokens per line and 73k lines per reviewer. A single
 # repo, so treat both as a rough guide.
 DEFAULT_MAX_LINES = 75_000
+LEAD_UNIT_LINES = 10_000  # a lead-only pass reviews the subfolders its leads touch, not whole areas
 TOKENS_PER_LINE = 7.0
 MAX_LEADS = 400  # per packet; cross-area leads go in first
 # Measured on one 2,200-file repo, six packets each (2026-11-15): a reviewer cost
@@ -95,13 +96,20 @@ def _can_split(unit, files):
     return any("/" in f["path"][len(prefix):] for f in files)
 
 
-def plan(doc, max_lines=DEFAULT_MAX_LINES):
-    """[{"name", "units", "lines", "leads"}] in order, largest first."""
-    units, owner = _units(doc, max_lines)
+def plan(doc, max_lines=DEFAULT_MAX_LINES, lead_units_only=False):
+    """[{"name", "units", "lines", "leads"}] in order, largest first. A first review packs every
+    unit. A lead-only pass (`lead_units_only`) packs only the units its leads touch, so a packet does
+    not carry unrelated code into the review. Its units are cut finer (subfolders of any area over
+    LEAD_UNIT_LINES), so one lead does not bring in a whole large area."""
+    units, owner = _units(doc, min(max_lines, LEAD_UNIT_LINES) if lead_units_only else max_lines)
 
     def units_of(lead):
         # every lead file is a scanned file, so it has an owner; the fallback is defensive
         return [owner.get(f["path"], lead["areas"][0]) for f in lead["files"]]
+
+    if lead_units_only:
+        touched = {u for lead in doc["leads"] for u in units_of(lead)}
+        units = {u: n for u, n in units.items() if u in touched}
 
     links = collections.Counter()
     for lead in doc["leads"]:
@@ -487,7 +495,8 @@ def write(doc, root, out, max_lines=DEFAULT_MAX_LINES, new_only=False, cross_are
         else:
             doc = {**doc, "leads": [l for l in doc["leads"] if not _fully_covered(l, known)]}
     # A focused pass is one reviewer for the whole repo: it reads what its leads point at.
-    bins = plan(filter_leads(doc, new_only, cross_area_only), 10 ** 12 if focus else max_lines)
+    bins = plan(filter_leads(doc, new_only, cross_area_only), 10 ** 12 if focus else max_lines,
+                lead_units_only=lead_only)
     if lead_only:
         bins = _drop_empty(bins)
     if known is not None:

@@ -150,7 +150,7 @@ A full review is expensive, and most of what it reads is noise it already reject
 
 ```sh
 seams scan --new                 # leads.md shows only new leads
-seams split --new-only           # packets hold only new leads; reviewers check leads, not whole areas
+seams split --new-only           # packets hold only new leads and the folders they touch
 # run the seam-reviewer agents, then:
 seams merge --apply              # writes seams.json and adds this scan's leads to the baseline
 ```

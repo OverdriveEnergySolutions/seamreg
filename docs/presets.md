@@ -64,7 +64,7 @@ The settings live in their own file because a team's CI runs its own copy of the
 | Any run after a release changed the saved preset | Yes, once |
 | No preset saved | Yes |
 
-A diff scan runs every step of the preset on the diff only: the reviewers take the new leads' packets, the lead check the new leads, and the drift check and re-rating the new seams.
+A diff scan runs every step of the preset on the diff only: the reviewers take the new leads' packets, the lead check the new leads, and the drift check and re-rating the new seams. A diff scan's packets hold only the folders its new leads touch, so a small diff gets a small review.
 
 ## Every setting
 

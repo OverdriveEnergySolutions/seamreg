@@ -150,7 +150,7 @@ def counts(doc, known, new_only=False):
     """Units of work for each step, from a scan's leads, before any agent runs."""
     from seams import leadcheck, rerate, split
     picked = split.filter_leads(doc, new_only=new_only)
-    bins = split._drop_empty(split.plan(picked))
+    bins = split._drop_empty(split.plan(picked, lead_units_only=new_only))
     lines = sum(b["lines"] for b in bins)
     leads = len(leadcheck.select(picked, known))
     seams = round(lines * SEAMS_PER_LINE)
