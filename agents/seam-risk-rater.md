@@ -2,6 +2,7 @@
 name: seam-risk-rater
 description: Sets the risk of each recorded seam in one re-rating packet that `seams rerate` wrote, and writes the new risks as JSON. Give it the packet file's path and nothing else.
 model: opus
+effort: medium
 tools: ["Read", "Grep", "Glob", "Bash", "Write"]
 ---
 

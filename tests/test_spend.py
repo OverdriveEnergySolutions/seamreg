@@ -1,0 +1,270 @@
+"""The run record and real spend: what a paid run costs, counted from the agents' own transcripts,
+and the dispatch check that holds a run under its ceiling."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from seams import cli, presets, spend
+
+FIX = Path(__file__).parent / "fixtures" / "transcripts"
+# Round test prices, dollars per million tokens: input, output, cache write, cache read.
+PRICES = {"claude-sonnet-5-5": (3.0, 15.0, 3.75, 6.0, 0.30), "claude-opus-5-5": (15.0, 75.0, 18.75, 30.0, 1.50)}
+
+
+@pytest.fixture(autouse=True)
+def prices(monkeypatch):
+    monkeypatch.setattr(presets, "PRICES", PRICES)
+
+
+def dollars(u, p):
+    return (u["input_tokens"] * p[0] + u["output_tokens"] * p[1] + u["cache_creation_input_tokens"] * p[2]
+            + u["cache_read_input_tokens"] * p[4]) / 1e6
+
+
+U1 = {"input_tokens": 10, "output_tokens": 1000, "cache_creation_input_tokens": 20000, "cache_read_input_tokens": 0}
+U2 = {"input_tokens": 5, "output_tokens": 2000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 100000}
+
+
+def test_a_response_split_across_lines_is_counted_once():
+    got = spend.transcript_cost(FIX / "split-message.jsonl")
+    want = dollars(U1, PRICES["claude-sonnet-5-5"]) + dollars(U2, PRICES["claude-sonnet-5-5"])
+    assert got["dollars"] == pytest.approx(want)
+    assert got["messages"] == 2
+    assert got["models"] == ["claude-sonnet-5-5"] and got["efforts"] == ["high"]
+
+
+def test_each_model_is_priced_at_its_own_rate():
+    got = spend.transcript_cost(FIX / "two-models-at-max.jsonl")
+    want = dollars(U1, PRICES["claude-opus-5-5"]) + dollars(U1, PRICES["claude-sonnet-5-5"])
+    assert got["dollars"] == pytest.approx(want)
+    assert got["efforts"] == ["max"]
+
+
+def test_a_model_missing_from_the_price_table_is_cost_unknown():
+    got = spend.transcript_cost(FIX / "unknown-model.jsonl")
+    assert got["dollars"] is None and got["unpriced"] == ["claude-sonnet-9-9"]
+
+
+def test_a_missing_transcript_is_cost_unknown(tmp_path):
+    got = spend.transcript_cost(tmp_path / "gone.jsonl")
+    assert got["dollars"] is None
+
+
+# --- the run record ------------------------------------------------------
+
+def settings(name="standard"):
+    return presets.resolve(name)
+
+
+def start(out, ceiling=10.0, per_packet=None, name="standard"):
+    per = per_packet or {s: 1.0 for s in presets.STEPS}
+    return spend.start(out, settings(name), estimate=ceiling, per_packet=per)
+
+
+def stop_payload(tmp_path, agent="seam-lead-checker", fixture="split-message.jsonl", session="sess-A", aid="a1"):
+    return {"hook_event_name": "SubagentStop", "session_id": session, "cwd": str(tmp_path), "agent_id": aid,
+            "agent_type": agent, "agent_transcript_path": str(FIX / fixture)}
+
+
+def pre_payload(tmp_path, agent="seam-lead-checker", session="sess-A"):
+    return {"hook_event_name": "PreToolUse", "session_id": session, "cwd": str(tmp_path), "tool_name": "Agent",
+            "tool_input": {"subagent_type": agent, "description": "d", "prompt": "p"}}
+
+
+def repo(tmp_path):
+    (tmp_path / "seams.json").write_text(json.dumps({"schema_version": 1, "seams": []}))
+    return tmp_path, tmp_path / ".seams-scan"
+
+
+def denied(out):
+    return bool(out) and out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_start_refuses_while_a_run_is_open_and_shows_its_spend(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root))
+    with pytest.raises(spend.OpenRun) as e:
+        start(out)
+    assert e.value.state["recorded"] > 0
+
+
+def test_a_finished_agent_adds_its_cost_model_and_effort(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    assert not denied(spend.on_pre_tool_use(pre_payload(root)))
+    spend.on_subagent_stop(stop_payload(root))
+    st = spend.state(out)
+    [a] = st["agents"]
+    assert a["step"] == "lead_check" and a["efforts"] == ["high"] and a["dollars"] > 0
+    assert st["reserved"] == 0 and st["differences"] == []
+
+
+def test_an_agent_at_another_effort_is_reported_as_a_difference(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root, fixture="two-models-at-max.jsonl"))
+    [d] = spend.state(out)["differences"]
+    assert d["step"] == "lead_check" and d["expected"] == "high" and d["ran"] == ["max"]
+
+
+def test_unknown_cost_counts_at_its_steps_per_packet_estimate(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, per_packet={s: 2.5 for s in presets.STEPS})
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root, fixture="unknown-model.jsonl"))
+    st = spend.state(out)
+    assert st["recorded"] == pytest.approx(2.5) and st["unknown"] == ["a1"]
+
+
+def test_other_agent_types_and_unbound_sessions_add_nothing(tmp_path):
+    root, out = repo(tmp_path)
+    start(out)
+    assert spend.on_pre_tool_use(pre_payload(root, agent="Explore")) is None
+    spend.on_pre_tool_use(pre_payload(root))  # binds the run to sess-A
+    spend.on_subagent_stop(stop_payload(root, agent="general-purpose", aid="x"))
+    spend.on_subagent_stop(stop_payload(root, session="sess-B", aid="y"))
+    assert spend.state(out)["agents"] == []
+
+
+def test_with_no_open_run_the_hooks_do_nothing(tmp_path):
+    root, out = repo(tmp_path)
+    assert spend.on_pre_tool_use(pre_payload(root)) is None
+    assert spend.on_subagent_stop(stop_payload(root)) is None
+    assert not (out / "runs").exists()
+
+
+def test_records_written_together_both_survive(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=100)
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root, aid="a1"))
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root, aid="a2"))
+    spend.on_subagent_stop(stop_payload(root, aid="a3"))
+    assert sorted(a["agent_id"] for a in spend.state(out)["agents"]) == ["a1", "a2", "a3"]
+
+
+def test_a_damaged_header_is_set_aside(tmp_path):
+    root, out = repo(tmp_path)
+    (out / "runs").mkdir(parents=True)
+    (out / "runs" / "runs.json").write_text("{broken")
+    run = start(out)
+    assert run["status"] == "open"
+    assert list((out / "runs").glob("runs.json.damaged*"))
+
+
+# --- the dispatch check -------------------------------------------------------
+
+def test_dispatch_past_the_ceiling_is_refused_and_names_it(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=1.6, per_packet={s: 1.5 for s in presets.STEPS})
+    assert not denied(spend.on_pre_tool_use(pre_payload(root)))
+    spend.on_subagent_stop(stop_payload(root))  # $0.15 spent: 0.15 + 1.50 passes 1.60
+    got = spend.on_pre_tool_use(pre_payload(root))
+    assert denied(got) and "$1.60" in got["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_raise_lets_the_next_dispatch_through(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=1.6, per_packet={s: 1.5 for s in presets.STEPS})
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root))
+    assert denied(spend.on_pre_tool_use(pre_payload(root)))
+    spend.raise_ceiling(out, 10.0)
+    assert not denied(spend.on_pre_tool_use(pre_payload(root)))
+
+
+def test_reservations_fill_the_room_with_no_agent_finished(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=5.0, per_packet={s: 1.0 for s in presets.STEPS})
+    spend.on_pre_tool_use(pre_payload(root))
+    spend.on_subagent_stop(stop_payload(root, aid="first"))  # the step's first packet is done
+    results = [denied(spend.on_pre_tool_use(pre_payload(root))) for _ in range(10)]
+    assert results.count(False) >= 1 and results[-1] is True
+    spend.on_subagent_stop(stop_payload(root, aid="second"))
+    assert spend.state(out)["reserved"] < sum(1 for r in results if not r)
+
+
+def test_a_steps_second_agent_waits_for_the_first_record(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=100)
+    assert not denied(spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")))
+    got = spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer"))
+    assert denied(got) and "first" in got["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_a_plugin_prefixed_agent_type_counts(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=100)
+    spend.on_pre_tool_use(pre_payload(root, agent="seams:seam-reviewer"))
+    assert spend.state(out)["reserved"] > 0
+
+
+# --- the commands --------------------------------------------------------
+
+def test_run_and_spend_commands_print_json(tmp_path, capsys):
+    root, out = repo(tmp_path)
+    start(out, ceiling=7.5)
+    capsys.readouterr()
+    assert cli.main(["spend", "--root", str(root), "--json"]) == 0
+    st = json.loads(capsys.readouterr().out)
+    assert st["ceiling"] == 7.5 and st["over"] is False
+    assert cli.main(["run", "raise", "--root", str(root), "--to", "12"]) == 0
+    assert cli.main(["run", "finish", "--root", str(root)]) == 0
+    assert spend.last_finished(out)["fingerprint"] == presets.fingerprint("standard")
+
+
+# --- the plugin's hook commands, run as Claude Code runs them -------------------
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _hook_command(event):
+    doc = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+    return doc["hooks"][event][0]["hooks"][0]["command"]
+
+
+def _run_hook(event, payload, plugin_root=ROOT):
+    import os
+    import subprocess
+    env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(plugin_root)}
+    env.pop("PYTHONPATH", None)
+    return subprocess.run(["bash", "-c", _hook_command(event)], input=json.dumps(payload), env=env,
+                          capture_output=True, text=True, timeout=30)
+
+
+def test_the_hook_commands_record_and_refuse_from_the_plugins_own_code(tmp_path):
+    root, out = repo(tmp_path)
+    start(out, ceiling=0.45, per_packet={s: 0.4 for s in presets.STEPS})
+    first = _run_hook("PreToolUse", pre_payload(root))
+    assert first.returncode == 0 and first.stdout == ""
+    stop = _run_hook("SubagentStop", stop_payload(root))
+    assert stop.returncode == 0
+    # The child process prices the agent with the real table: $0.09, so 0.40 more passes 0.45.
+    refused = _run_hook("PreToolUse", pre_payload(root))
+    assert json.loads(refused.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert len(spend.state(out)["agents"]) == 1
+
+
+def test_a_hook_with_no_plugin_code_exits_quietly(tmp_path):
+    got = _run_hook("SubagentStop", stop_payload(tmp_path), plugin_root=tmp_path / "nowhere")
+    assert got.returncode == 0 and got.stdout == ""
+
+
+def test_a_one_hour_cache_write_costs_more_than_a_five_minute_one(tmp_path):
+    def line(split):
+        return json.dumps({"type": "assistant", "effort": "high", "message": {
+            "id": "m", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 0, "output_tokens": 0,
+            "cache_creation_input_tokens": 1_000_000, "cache_read_input_tokens": 0, "cache_creation": split}}})
+    five, hour = tmp_path / "5m.jsonl", tmp_path / "1h.jsonl"
+    five.write_text(line({"ephemeral_5m_input_tokens": 1_000_000, "ephemeral_1h_input_tokens": 0}))
+    hour.write_text(line({"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 1_000_000}))
+    assert spend.transcript_cost(five)["dollars"] == pytest.approx(3.75)
+    assert spend.transcript_cost(hour)["dollars"] == pytest.approx(6.0)

@@ -1,0 +1,28 @@
+{
+  "description": "seamreg: record what each seamreg agent really costs during a paid run, and refuse a start that would pass the run's ceiling. Both do nothing outside an open run.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CLAUDE_PLUGIN_ROOT}/src/seams/spend.py\"; [ -f \"$f\" ] && command -v python3 >/dev/null 2>&1 || exit 0; PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}/src\" python3 -m seams.spend pre-tool-use || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CLAUDE_PLUGIN_ROOT}/src/seams/spend.py\"; [ -f \"$f\" ] && command -v python3 >/dev/null 2>&1 || exit 0; PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}/src\" python3 -m seams.spend subagent-stop || true",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

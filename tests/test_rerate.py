@@ -41,3 +41,18 @@ def test_collect_writes_new_risks_and_reports_each_change(tmp_path, capsys):
     report = (root / ".seams-scan/rerate/rerate-report.md").read_text()
     assert "`s0`: low to **high**. Sign-in skips a check." in report and "unknown id or risk" in report
     assert "1 raised" in capsys.readouterr().out
+
+
+def test_ids_limits_the_packets_to_the_named_seams(tmp_path, capsys):
+    # A diff scan re-rates only the seams it added.
+    root = repo(tmp_path, 5)
+    assert cli.main(["rerate", "--root", str(root), "--ids", "s1,s3"]) == 0
+    [packet] = (root / ".seams-scan/rerate/packets").glob("*.md")
+    text = packet.read_text()
+    assert "## Seams (2)" in text and "`s1`" in text and "`s3`" in text and "`s0`" not in text
+
+
+def test_ids_naming_no_recorded_seam_is_an_error(tmp_path, capsys):
+    root = repo(tmp_path, 2)
+    assert cli.main(["rerate", "--root", str(root), "--ids", "nope"]) == 2
+    assert "nope" in capsys.readouterr().err

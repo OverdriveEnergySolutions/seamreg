@@ -41,9 +41,14 @@ def _seam_md(i, s):
     return "\n".join(rows) + "\n"
 
 
-def write_packets(registry_path, root, out, batch=BATCH):
-    """Write rerate/packets/rr-NN.md. Returns the packet paths."""
+def write_packets(registry_path, root, out, batch=BATCH, ids=None):
+    """Write rerate/packets/rr-NN.md, for every seam or only the seams in `ids`. Returns the packet paths."""
     data = _load_valid(registry_path)
+    if ids is not None:
+        missing = sorted(set(ids) - {s["id"] for s in data["seams"]})
+        if missing:
+            raise ValueError(f"no recorded seam has the id {', '.join(missing)}")
+        data = {**data, "seams": [s for s in data["seams"] if s["id"] in set(ids)]}
     base = Path(out) / "rerate"
     (base / "packets").mkdir(parents=True, exist_ok=True)
     (base / "results").mkdir(exist_ok=True)

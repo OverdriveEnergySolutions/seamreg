@@ -2,6 +2,7 @@
 name: seam-drift-checker
 description: Checks whether one seam's copies agree today, and writes the answer as JSON. Only for packets that `seams verify` wrote. Give it the packet file's path and nothing else.
 model: inherit
+effort: max
 tools: ["Read", "Grep", "Glob", "Bash", "Write"]
 ---
 

@@ -291,7 +291,8 @@ def cmd_rerate(args):
             print(f"{counts['rated']} seams rated from {counts['files']} file(s): {counts['up']} raised, "
                   f"{counts['down']} lowered, written to {reg}. Report: {report}")
             return 0
-        paths = rerate.write_packets(reg, args.root, out, args.batch)
+        ids = [i.strip() for i in args.ids.split(",") if i.strip()] if args.ids else None
+        paths = rerate.write_packets(reg, args.root, out, args.batch, ids=ids)
     except ValueError as e:
         print(f"seams: {e}", file=sys.stderr)
         return 2
@@ -397,6 +398,81 @@ def cmd_looked_at(args):
     (out / "looked-at.json").write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
     print(f"{doc['transcripts']} transcript(s): {len(doc['read'])} files read, {len(doc['searched'])} searched. "
           f"Wrote {out / 'looked-at.json'}. `seams split --focus open` shows it to the reviewer.")
+    return 0
+
+
+def cmd_presets(args):
+    from seams import presets
+    try:
+        rep = presets.report(args.root, _out(args), args.preset, args.set or ())
+    except FileNotFoundError:
+        print("seams: no scan yet. Run `seams scan` first: the estimate counts its leads.", file=sys.stderr)
+        return 2
+    except ValueError as e:
+        print(f"seams: {e}", file=sys.stderr)
+        return 2
+    print(json.dumps(rep, indent=1) if args.json else presets.text(rep))
+    return 0
+
+
+def cmd_run(args):
+    from seams import presets, spend
+    out = _out(args)
+    try:
+        if args.action == "start":
+            if not args.preset:
+                print("seams: name the preset the user chose: --preset standard or --preset all-in", file=sys.stderr)
+                return 2
+            rep = presets.report(args.root, out, args.preset, args.set or ())
+            row = rep["presets"][args.preset]
+            est = row["diff"] if args.diff else row["full"]
+            if est["agents"] is None:
+                print("seams: this run's cost is not measured for these settings. Ask the user for a ceiling "
+                      "and pass it with --ceiling.", file=sys.stderr)
+                if args.ceiling is None:
+                    return 2
+            per = {s: v["per_packet"] or 0 for s, v in est["steps"].items()}
+            run = spend.start(out, row["settings"], est["agents"] if est["agents"] is not None else args.ceiling,
+                             per, args.ceiling)
+            print(json.dumps(run, indent=1) if args.json else
+                  f"run {run['id']}: {run['preset']}, estimate ${run['estimate']:,.2f}, ceiling ${run['ceiling']:,.2f}")
+        elif args.action == "raise":
+            if args.to is None:
+                print("seams: give the new ceiling in dollars: --to 40", file=sys.stderr)
+                return 2
+            run = spend.raise_ceiling(out, args.to)
+            print(f"run {run['id']}: ceiling ${run['ceiling']:,.2f}")
+        else:
+            st = spend.finish(out, "stopped" if args.action == "stop" else "finished")
+            print(json.dumps(st, indent=1) if args.json else
+                  f"run {st['run']} {args.action}ed: ${st['recorded']:,.2f} spent against an estimate of "
+                  f"${st['estimate']:,.2f}" + (f". {len(st['differences'])} agent(s) ran at another effort."
+                                                if st["differences"] else "."))
+    except spend.OpenRun as e:
+        st = e.state
+        print(f"seams: run {st['run']} is still open (${st['recorded']:,.2f} spent). Report it, then close it "
+              "with `seams run stop` before starting another.", file=sys.stderr)
+        if args.json:
+            print(json.dumps(st, indent=1))
+        return 2
+    except (FileNotFoundError, ValueError) as e:
+        print(f"seams: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_spend(args):
+    from seams import spend
+    st = spend.state(_out(args))
+    if args.json:
+        print(json.dumps(st, indent=1))
+    elif st["run"] is None:
+        print("No run is open.")
+    else:
+        print(f"run {st['run']} ({st['preset']}): ${st['recorded']:,.2f} spent, ${st['reserved']:,.2f} running, "
+              f"ceiling ${st['ceiling']:,.2f}, {len(st['agents'])} agent(s) finished"
+              + (f", {len(st['unknown'])} with cost unknown" if st["unknown"] else "")
+              + (f", {len(st['differences'])} at another effort" if st["differences"] else "") + ".")
     return 0
 
 
@@ -665,6 +741,7 @@ def build_parser():
     p.add_argument("--root", default=".")
     p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
     p.add_argument("--registry", help="registry to read and update (default: <root>/seams.json)")
+    p.add_argument("--ids", help="re-rate these seam ids only, comma-separated (a diff scan's new seams)")
     p.add_argument("--batch", type=int, default=30, help="seams per packet (default 30)")
     p.add_argument("--collect", action="store_true", help="write the raters' risks into the registry")
     p.set_defaults(func=cmd_rerate)
@@ -703,6 +780,33 @@ def build_parser():
     p.add_argument("--pass", dest="passes", action="append", metavar="KIND",
                    help="a pass those sessions ran (first, gap, focus:twins), when passes.json does not list it")
     p.set_defaults(func=cmd_looked_at)
+
+    p = sub.add_parser("presets", help="the presets, their settings, and what each costs on this repo")
+    p.add_argument("--root", default=".")
+    p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
+    p.add_argument("--preset", choices=["standard", "all-in"], help="show this preset only")
+    p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE",
+                   help="change one setting for this run, for example lead_check.effort=xhigh")
+    p.add_argument("--json", action="store_true", help="print JSON, for the review skill")
+    p.set_defaults(func=cmd_presets)
+
+    p = sub.add_parser("run", help="open, raise, stop or finish the record of a paid run")
+    p.add_argument("action", choices=["start", "raise", "stop", "finish"])
+    p.add_argument("--root", default=".")
+    p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
+    p.add_argument("--preset", choices=["standard", "all-in"], help="with start: the preset the user chose")
+    p.add_argument("--set", action="append", metavar="STEP.SETTING=VALUE", help="with start: this run's changes")
+    p.add_argument("--diff", action="store_true", help="with start: a diff scan, priced on the new leads only")
+    p.add_argument("--ceiling", type=float, help="with start: the ceiling in dollars, when not the estimate")
+    p.add_argument("--to", type=float, help="with raise: the new ceiling in dollars")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("spend", help="the open run's spend so far, against its ceiling")
+    p.add_argument("--root", default=".")
+    p.add_argument("--out", help="the scan's output folder (default: <root>/.seams-scan)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_spend)
 
     p = sub.add_parser("next", help="rank the candidate next passes, each with its reason and cost")
     p.add_argument("--root", default=".")
