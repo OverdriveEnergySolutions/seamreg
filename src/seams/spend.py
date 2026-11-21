@@ -146,6 +146,8 @@ def transcript_cost(path):
     except OSError:
         return {"dollars": None, "messages": 0, "models": [], "efforts": [], "unpriced": [], "tokens": {}}
     for line in lines:
+        if '"usage"' not in line:  # most lines are tool results and prompts: skip them unparsed
+            continue
         try:
             d = json.loads(line)
         except ValueError:
@@ -189,9 +191,13 @@ def _header(out):
     return {"runs": []}
 
 
-def open_run(out):
-    runs = _header(out)["runs"]
+def _open_of(head):
+    runs = head["runs"]
     return runs[-1] if runs and runs[-1].get("status") == "open" else None
+
+
+def open_run(out):
+    return _open_of(_header(out))
 
 
 def last_finished(out):
@@ -204,7 +210,7 @@ def last_finished(out):
 def start(out, settings, estimate, per_packet, ceiling=None):
     """Open a run. Refuses while another is open, carrying that run's state."""
     head = _header(out)
-    if head["runs"] and head["runs"][-1].get("status") == "open":
+    if _open_of(head):
         raise OpenRun(state(out))
     run = {"id": datetime.datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6],
            "status": "open", "started": _now(), "preset": settings["preset"],
@@ -219,7 +225,7 @@ def start(out, settings, estimate, per_packet, ceiling=None):
 
 def _update_open(out, **fields):
     head = _header(out)
-    run = head["runs"][-1] if head["runs"] and head["runs"][-1].get("status") == "open" else None
+    run = _open_of(head)
     if run is None:
         raise ValueError("no run is open. Start one with `seams run start`.")
     run.update(fields)
@@ -232,12 +238,11 @@ def raise_ceiling(out, to):
 
 
 def finish(out, status="finished"):
-    run = _update_open(out, status=status, ended=_now())
-    run_state = state(out, run)
-    head = _header(out)
-    head["runs"][-1]["actual"] = run_state["recorded"]
-    _write(_dir(out) / HEADER, head)
-    return run_state
+    run = open_run(out)
+    if run is None:
+        raise ValueError("no run is open. Start one with `seams run start`.")
+    recorded = state(out, run)["recorded"]
+    return state(out, _update_open(out, status=status, ended=_now(), actual=recorded))
 
 
 def _files(out, run, prefix):
@@ -280,13 +285,8 @@ def _out_for(payload):
 
 
 def _bound(out, run, session_id):
-    """True when this session may act on the run. The first start from any session binds it."""
-    path = _dir(out) / run["id"] / "session.json"
-    bound = (_read(path) or {}).get("id")
-    if bound is None:
-        _write(path, {"id": session_id, "bound": _now()})
-        return True
-    return bound == session_id
+    """Bind the run to the session of its first allowed start. Called under the run's lock."""
+    _write(_dir(out) / run["id"] / "session.json", {"id": session_id, "bound": _now()})
 
 
 def _deny(reason):
@@ -299,8 +299,10 @@ def on_pre_tool_use(payload):
     if payload.get("tool_name") not in ("Agent", "Task"):
         return None
     step = _step((payload.get("tool_input") or {}).get("subagent_type"))
+    if not step:
+        return None
     out = _out_for(payload)
-    run = open_run(out) if step and out else None
+    run = open_run(out) if out else None
     if run is None:
         return None
     folder = _dir(out) / run["id"]
@@ -316,19 +318,22 @@ def _check_and_reserve(out, run, folder, step, payload):
     session = (_read(folder / "session.json") or {}).get("id")
     if session is not None and session != payload.get("session_id"):
         return None
-    st = state(out, run)
-    done = [a for a in st["agents"] if a["step"] == step]
-    waiting = [r for r in _files(out, run, "res") if r["step"] == step]
+    agents, held = _files(out, run, "agent"), _files(out, run, "res")
+    recorded = sum(a["counted"] for a in agents)
+    reserved = sum(r["amount"] for r in held)
+    done = [a for a in agents if a["step"] == step]
+    waiting = [r for r in held if r["step"] == step]
     if not done and waiting:
         return _deny(f"seams: the first {presets.STEP_TEXT[step]} agent of this run has not finished. "
                      "Wait for it: its real cost corrects the estimate before the rest start.")
     amount = float(run["per_packet"].get(step) or 0)
-    if st["recorded"] + st["reserved"] + amount > run["ceiling"] + 1e-9:
+    if recorded + reserved + amount > run["ceiling"] + 1e-9:
         return _deny(f"seams: this would pass the run's ceiling of ${run['ceiling']:,.2f} "
-                     f"(${st['recorded']:,.2f} spent, ${st['reserved']:,.2f} running). Ask the user. "
+                     f"(${recorded:,.2f} spent, ${reserved:,.2f} running). Ask the user. "
                      "Raise it with `seams run raise --to <dollars>` only after they say yes. "
                      "With nobody to ask, stop and report what finished and what did not.")
-    _bound(out, run, payload.get("session_id"))
+    if session is None:
+        _bound(out, run, payload.get("session_id"))
     _write(folder / f"res-{uuid.uuid4().hex}.json", {"step": step, "amount": amount, "at": _now()})
     return None
 
@@ -336,8 +341,10 @@ def _check_and_reserve(out, run, folder, step, payload):
 def on_subagent_stop(payload):
     """Record a finished seamreg agent and free one of its step's reservations."""
     step = _step(payload.get("agent_type"))
+    if not step:
+        return None
     out = _out_for(payload)
-    run = open_run(out) if step and out else None
+    run = open_run(out) if out else None
     if run is None:
         return None
     folder = _dir(out) / run["id"]

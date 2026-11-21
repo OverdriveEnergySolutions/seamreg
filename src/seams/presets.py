@@ -20,7 +20,7 @@ STEPS = check.STEPS
 AGENT = {"review": "seam-reviewer", "drift_check": "seam-drift-checker",
          "lead_check": "seam-lead-checker", "rerate": "seam-risk-rater"}
 STEP_TEXT = {"review": "review", "drift_check": "drift check", "lead_check": "lead check", "rerate": "risk re-rating"}
-DEFAULT_DIFF_LIMIT = 25  # percent of a full run on the same preset
+DEFAULT_DIFF_LIMIT = check.DEFAULT_DIFF_LIMIT
 
 # What each preset runs. Values come from the measured runs (docs/presets.md lists each source).
 DEFINITIONS = {
@@ -66,9 +66,6 @@ SEAMS_PER_LINE = 0.00054  # seams a first review records per reviewed line, 4 re
 CHECKED_SHARE = 0.2  # share of recorded seams the drift check picks: high and medium risk, no drift yet
 CHECKED_CAP = 20  # the skill samples at most this many
 ORCHESTRATOR_SHARE = 0.13  # the session that runs the skill: 11 to 15% of a first review's total
-LEAD_BATCH = 25  # leads per lead-check packet, as leadcheck.BATCH
-RERATE_BATCH = 30  # seams per re-rating packet, as rerate.BATCH
-EFFORT_ORDER = check.EFFORTS
 
 
 def fingerprint(name):
@@ -131,14 +128,16 @@ def plain(settings):
 
 def rate(step, model, effort):
     """(dollars per unit, measured) for a step. An unmeasured effort borrows the nearest measured
-    higher effort for the same model, so an estimate errs high. None when nothing fits."""
+    higher effort for the same model. Above every measured effort, it takes the highest measured
+    rate times MAX_STRETCH. Either way the estimate errs high. None when the model has no rate."""
     if (step, model, effort) in RATES:
         return RATES[(step, model, effort)], True
-    higher = EFFORT_ORDER[EFFORT_ORDER.index(effort) + 1:]
+    order = check.EFFORTS
+    higher = order[order.index(effort) + 1:]
     for e in higher:
         if (step, model, e) in RATES:
             return RATES[(step, model, e)], False
-    for e in reversed(EFFORT_ORDER[:EFFORT_ORDER.index(effort)]):
+    for e in reversed(order[:order.index(effort)]):
         if (step, model, e) in RATES:
             return RATES[(step, model, e)] * MAX_STRETCH, False
     return None, False
@@ -146,16 +145,16 @@ def rate(step, model, effort):
 
 def counts(doc, known, new_only=False):
     """Units of work for each step, from a scan's leads, before any agent runs."""
-    from seams import leadcheck, split
+    from seams import leadcheck, rerate, split
     picked = split.filter_leads(doc, new_only=new_only)
     bins = split._drop_empty(split.plan(picked))
     lines = sum(b["lines"] for b in bins)
     leads = len(leadcheck.select(picked, known))
-    seams = round(lines * SEAMS_PER_LINE) if SEAMS_PER_LINE is not None else None
-    checked = min(CHECKED_CAP, round(seams * CHECKED_SHARE)) if seams is not None else None
+    seams = round(lines * SEAMS_PER_LINE)
+    checked = min(CHECKED_CAP, round(seams * CHECKED_SHARE))
     return {"review": lines, "lead_check": leads, "drift_check": checked, "rerate": seams,
-            "packets": {"review": len(bins), "lead_check": math.ceil(leads / LEAD_BATCH),
-                        "drift_check": checked, "rerate": math.ceil(seams / RERATE_BATCH) if seams else 0}}
+            "packets": {"review": len(bins), "lead_check": math.ceil(leads / leadcheck.BATCH),
+                        "drift_check": checked, "rerate": math.ceil(seams / rerate.BATCH)}}
 
 
 def estimate(settings, work):
@@ -177,14 +176,13 @@ def estimate(settings, work):
         else:
             total += dollars
     agents = round(total, 2) if known else None
-    session = round(agents * ORCHESTRATOR_SHARE, 2) if agents is not None and ORCHESTRATOR_SHARE is not None else None
+    session = round(agents * ORCHESTRATOR_SHARE, 2) if agents is not None else None
     return {"steps": steps, "agents": agents, "orchestrator": session}
 
 
 def report(root, out, preset=None, sets=()):
     """Everything the skill needs before a paid run, as one JSON-ready dict."""
-    from seams import split
-    from seams import spend
+    from seams import spend, split
     root, out = Path(root), Path(out)
     saved = load_saved(root)
     doc = split.load_leads(out)

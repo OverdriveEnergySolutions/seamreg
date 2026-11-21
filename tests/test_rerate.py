@@ -44,7 +44,6 @@ def test_collect_writes_new_risks_and_reports_each_change(tmp_path, capsys):
 
 
 def test_ids_limits_the_packets_to_the_named_seams(tmp_path, capsys):
-    # A diff scan re-rates only the seams it added.
     root = repo(tmp_path, 5)
     assert cli.main(["rerate", "--root", str(root), "--ids", "s1,s3"]) == 0
     [packet] = (root / ".seams-scan/rerate/packets").glob("*.md")

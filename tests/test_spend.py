@@ -10,7 +10,8 @@ import pytest
 from seams import cli, presets, spend
 
 FIX = Path(__file__).parent / "fixtures" / "transcripts"
-# Round test prices, dollars per million tokens: input, output, cache write, cache read.
+# Round test prices, dollars per million tokens: input, output, cache write (5 minutes), cache write
+# (1 hour), cache read.
 PRICES = {"claude-sonnet-5-5": (3.0, 15.0, 3.75, 6.0, 0.30), "claude-opus-5-5": (15.0, 75.0, 18.75, 30.0, 1.50)}
 
 

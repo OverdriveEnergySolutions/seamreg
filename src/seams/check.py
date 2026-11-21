@@ -176,6 +176,7 @@ STEPS = ("review", "drift_check", "lead_check", "rerate")
 MODELS = ("sonnet", "opus", "haiku", "fable")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 DIFF_LIMITS = (5, 10, 15, 20, 25, 30, 40, 50, 75, 100)  # percent of a full run on the same preset
+DEFAULT_DIFF_LIMIT = 25
 
 _STEP_SETTINGS = {
     "type": "object",
@@ -203,7 +204,7 @@ SETTINGS_SCHEMA = {
                     "description": "Per step, the model or effort the team set by hand."},
         "diff_limit_percent": {"type": "integer", "enum": list(DIFF_LIMITS),
                                "description": "A diff scan runs without asking while its estimate stays "
-                               "under this share of a full run on the same preset. Default 25."},
+                               f"under this share of a full run on the same preset. Default {DEFAULT_DIFF_LIMIT}."},
     },
 }
 

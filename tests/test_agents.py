@@ -22,7 +22,7 @@ def test_agent_effort_floors_match_the_standard_preset():
 
 
 def test_pinned_models_match_the_standard_preset():
-    # seam-reviewer and seam-drift-checker inherit the session's model; the skill sets it on each start.
+    # seam-reviewer and seam-drift-checker inherit the session's model. The skill sets it on each start.
     for step, agent in presets.AGENT.items():
         model = frontmatter(agent)["model"]
         assert model in ("inherit", presets.DEFINITIONS["standard"][step]["model"]), agent
