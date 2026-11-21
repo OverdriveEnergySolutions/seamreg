@@ -321,3 +321,53 @@ def test_an_unmeasured_step_reserves_a_share_of_the_ceiling(tmp_path, capsys):
                      "--ceiling", "20", "--json"]) == 0
     run = json.loads(capsys.readouterr().out)
     assert run["per_packet"]["lead_check"] > 0
+
+
+def test_a_start_is_refused_when_the_record_stays_locked(tmp_path, monkeypatch):
+    # Failing open here would let a start through unchecked.
+    import contextlib
+    root, out = repo(tmp_path)
+    start(out)
+
+    @contextlib.contextmanager
+    def stuck(folder, **k):
+        raise TimeoutError("the run record stayed locked")
+        yield
+
+    monkeypatch.setattr(spend, "_locked", stuck)
+    assert denied(spend.on_pre_tool_use(pre_payload(root)))
+
+
+def test_a_finished_agent_is_recorded_even_when_the_record_stays_locked(tmp_path, monkeypatch):
+    import contextlib
+    root, out = repo(tmp_path)
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+
+    @contextlib.contextmanager
+    def stuck(folder, **k):
+        raise TimeoutError("the run record stayed locked")
+        yield
+
+    monkeypatch.setattr(spend, "_locked", stuck)
+    spend.on_subagent_stop(stop_payload(root))
+    st = spend.state(out)
+    assert len(st["agents"]) == 1 and st["reserved"] > 0  # the reservation stays: stop early, not late
+
+
+def test_a_lock_held_by_another_process_waits_and_is_never_broken(tmp_path):
+    import subprocess
+    import sys
+    folder = tmp_path / "run"
+    folder.mkdir()
+    holder = subprocess.Popen([sys.executable, "-c", (
+        "import sys, time; sys.path.insert(0, sys.argv[1]); from seams import spend; from pathlib import Path\n"
+        "with spend._locked(Path(sys.argv[2])):\n    print('held', flush=True); time.sleep(1.5)"),
+        str(ROOT / "src"), str(folder)], stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "held"
+    with pytest.raises(TimeoutError):
+        with spend._locked(folder, wait=0.3):
+            pass
+    holder.wait(timeout=10)
+    with spend._locked(folder, wait=2):  # free once the holder is gone
+        pass

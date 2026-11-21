@@ -57,22 +57,49 @@ def _write(path, data):
     os.replace(tmp, path)
 
 
+try:
+    import fcntl  # POSIX: the OS drops the lock when its holder dies, so no lock is ever broken by age
+except ImportError:  # Windows
+    fcntl = None
+
+
 @contextlib.contextmanager
-def _locked(folder, wait=8.0, stale=30.0):
+def _locked(folder, wait=8.0, stale=60.0):
     """One hook at a time per run. Agents started in one message get their hooks run side by side,
-    and each must see the reservations the others made. A lock older than `stale` seconds belongs to
-    a hook that died, and is broken."""
+    and each must see the reservations the others made. Raises TimeoutError after `wait` seconds."""
     folder.mkdir(parents=True, exist_ok=True)
     lock = folder / ".lock"
     deadline = time.monotonic() + wait
+    if fcntl is not None:
+        fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() > deadline:
+                        raise TimeoutError("the run record stayed locked")
+                    time.sleep(0.02)
+            yield
+        finally:
+            os.close(fd)  # closing releases the lock
+        return
+    # Without flock: a lock file holding its owner's token. A lock older than `stale` belongs to a hook
+    # that died. It is moved aside under a unique name first, so two waiters cannot both break it.
+    token = f"{os.getpid()}-{uuid.uuid4().hex}"
     while True:
         try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.write(fd, token.encode())
+            os.close(fd)
             break
         except FileExistsError:
             try:
                 if time.time() - lock.stat().st_mtime > stale:
-                    lock.unlink()
+                    aside = lock.with_name(f".lock.stale-{uuid.uuid4().hex}")
+                    os.replace(lock, aside)
+                    aside.unlink()
                     continue
             except FileNotFoundError:
                 continue
@@ -82,9 +109,9 @@ def _locked(folder, wait=8.0, stale=30.0):
     try:
         yield
     finally:
-        os.close(fd)
-        with contextlib.suppress(FileNotFoundError):
-            lock.unlink()
+        with contextlib.suppress(OSError):
+            if lock.read_text() == token:
+                lock.unlink()
 
 
 def _read(path):
@@ -277,8 +304,12 @@ def on_pre_tool_use(payload):
     if run is None:
         return None
     folder = _dir(out) / run["id"]
-    with _locked(folder):
-        return _check_and_reserve(out, run, folder, step, payload)
+    try:
+        with _locked(folder):
+            return _check_and_reserve(out, run, folder, step, payload)
+    except TimeoutError:
+        return _deny("seams: the run record is busy, so this start cannot be checked against the ceiling. "
+                     "Wait a moment and start the agent again.")
 
 
 def _check_and_reserve(out, run, folder, step, payload):
@@ -314,12 +345,16 @@ def on_subagent_stop(payload):
     if session is None or session != payload.get("session_id"):
         return None
     cost = transcript_cost(payload.get("agent_transcript_path") or "")
-    with _locked(folder):
-        _record(folder, run, step, payload, cost)
+    try:
+        with _locked(folder):
+            _record(folder, run, step, payload, cost)
+    except TimeoutError:
+        # Keep the record, and leave the reservation in place: the run then stops early, never late.
+        _record(folder, run, step, payload, cost, release=False)
     return None
 
 
-def _record(folder, run, step, payload, cost):
+def _record(folder, run, step, payload, cost, release=True):
     per = float(run["per_packet"].get(step) or 0)
     aid = str(payload.get("agent_id") or uuid.uuid4().hex)
     record = {"agent_id": aid, "step": step, "agent_type": payload.get("agent_type"), "at": _now(),
@@ -327,7 +362,7 @@ def _record(folder, run, step, payload, cost):
               "models": cost["models"], "efforts": cost["efforts"], "tokens": cost["tokens"],
               "unpriced": cost["unpriced"]}
     _write(folder / f"agent-{aid}.json", record)
-    for res in sorted(folder.glob("res-*.json")):
+    for res in sorted(folder.glob("res-*.json")) if release else ():
         r = _read(res)
         if isinstance(r, dict) and r.get("step") == step:
             try:
