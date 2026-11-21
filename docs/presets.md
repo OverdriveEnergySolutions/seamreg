@@ -12,10 +12,12 @@ Costs here are API-equivalent dollars. On a Claude subscription you are not char
 | Drift check | Sonnet, max effort | Sonnet, max effort |
 | Lead check | Sonnet, high effort | Sonnet, max effort |
 | Risk re-rating | Opus, medium effort | Opus, max effort |
-| Measured on one 555-file repo | about $30 | about $158 |
-| Known drifts found there, of 17 | 3 to 4, plus 1 to 2 partly | 8 to 9, plus 3 partly |
+| Measured on one 555-file repo | $27 to $32 | about $158 |
+| Known drifts found there, of 17 | 3 to 5, plus 1 to 2 partly | 8 to 9, plus 3 partly |
 
 **standard** is the measured best value. Its lead check runs at high effort, which adds about 2 known drifts to a review for about $4. On the measured repo it cost about 20% of all-in.
+
+The latest standard run skipped the libraries the repo copies in (jQuery, DataTables, Bootstrap and jdenticon), which were 40% of its review packet. It cost $26.58 and found 5 known drifts plus 1 partly, against $31.87 and 3 plus 1 before. The new drifts are all in the project's own code. One run cannot separate that gain from the one or two drifts runs differ by, but the lower cost holds: the review and the drift check had less to read.
 
 **all-in** runs every step at max effort. Its lead check reads much further beyond each lead's own files. That found two to three times the known drifts of standard, for about five times the price. Most of the extra cost is the lead check: $109.08 and $129.54 at max in two runs, against $2.76 and $4.44 at high.
 
