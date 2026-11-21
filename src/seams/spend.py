@@ -76,7 +76,7 @@ def _locked(folder, wait=8.0, stale=60.0):
     lock = folder / ".lock"
     deadline = time.monotonic() + wait
     if fcntl is not None:
-        fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+        fd = os.open(lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
             while True:
                 try:
@@ -310,9 +310,23 @@ def _out_for(payload):
     return None if root is None else root / ".seams-scan"
 
 
-def _bound(out, run, session_id):
+def _hook_folder(out, run):
+    """The run's folder, for the hooks to write in, or None. A target repo can commit its own
+    .seams-scan, so a symlink at any level of the record (or out of the repo) is refused: the
+    hooks then write nothing."""
+    folder = _dir(out) / run["id"]
+    for level in (Path(out), _dir(out), folder):
+        if level.is_symlink():
+            return None
+    real = Path(out).resolve()
+    if folder.exists() and folder.resolve().parent != real / RUNS:
+        return None
+    return folder
+
+
+def _bound(folder, session_id):
     """Bind the run to the session of its first allowed start. Called under the run's lock."""
-    _write(_dir(out) / run["id"] / "session.json", {"id": session_id, "bound": _now()})
+    _write(folder / "session.json", {"id": session_id, "bound": _now()})
 
 
 def _deny(reason):
@@ -329,9 +343,9 @@ def on_pre_tool_use(payload):
         return None
     out = _out_for(payload)
     run = open_run(out) if out else None
-    if run is None:
+    folder = _hook_folder(out, run) if run else None
+    if folder is None:
         return None
-    folder = _dir(out) / run["id"]
     try:
         with _locked(folder):
             return _check_and_reserve(out, run, folder, step, payload)
@@ -361,7 +375,7 @@ def _check_and_reserve(out, run, folder, step, payload):
                      "Raise it with `seams run raise --to <dollars>` only after they say yes. "
                      "With nobody to ask, stop and report what finished and what did not.")
     if session is None:
-        _bound(out, run, payload.get("session_id"))
+        _bound(folder, payload.get("session_id"))
     _write(folder / f"res-{uuid.uuid4().hex}.json", {"step": step, "amount": amount, "at": _now()})
     return None
 
@@ -373,9 +387,9 @@ def on_subagent_stop(payload):
         return None
     out = _out_for(payload)
     run = _recording(out) if out else None
-    if run is None:
+    folder = _hook_folder(out, run) if run else None
+    if folder is None:
         return None
-    folder = _dir(out) / run["id"]
     session = (_read(folder / "session.json") or {}).get("id")
     if session is None or session != payload.get("session_id"):
         return None

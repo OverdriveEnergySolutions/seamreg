@@ -517,3 +517,33 @@ def test_an_agent_id_that_is_not_a_plain_name_does_not_name_the_file(tmp_path):
     spend.on_subagent_stop(stop_payload(root, aid="../../escape"))
     [a] = spend.state(out)["agents"]
     assert "/" not in a["agent_id"] and not (tmp_path / "escape.json").exists()
+
+
+@pytest.mark.parametrize("level", ["run folder", "runs", ".seams-scan"])
+def test_a_symlinked_run_record_cannot_send_the_hooks_outside_the_record(tmp_path, level):
+    # A valid run id, but the repo committed a symlink at one level of the record.
+    root, out = subrepo(tmp_path, "repo")
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "session.json").write_text('{"keep": "me"}')
+    run_id = "20261120-000000-abcdef"
+    record = json.dumps({"runs": [{"id": run_id, "status": "open", "ceiling": 1e6,
+                                   "per_packet": {"review": 0.01}, "settings": {}}]})
+    if level == "run folder":
+        (out / "runs").mkdir(parents=True)
+        (out / "runs" / "runs.json").write_text(record)
+        (out / "runs" / run_id).symlink_to(victim)
+    elif level == "runs":
+        (victim / "runs.json").write_text(record)
+        out.mkdir()
+        (out / "runs").symlink_to(victim)
+        (victim / run_id).mkdir()
+    else:
+        (victim / "runs").mkdir()
+        (victim / "runs" / "runs.json").write_text(record)
+        out.symlink_to(victim)
+    before = sorted(str(p.relative_to(victim)) for p in victim.rglob("*"))
+    assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")) is None
+    assert spend.on_subagent_stop(stop_payload(root, agent="seam-reviewer")) is None
+    assert sorted(str(p.relative_to(victim)) for p in victim.rglob("*")) == before
+    assert (victim / "session.json").read_text() == '{"keep": "me"}'
