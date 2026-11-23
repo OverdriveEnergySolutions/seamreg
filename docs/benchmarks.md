@@ -14,12 +14,16 @@ the dollars as a relative measure, for comparing one step or model with another.
 
 ## The short version
 
-1. **When the registry holds the seam, agents keep the copies in step far more often.** Real past
-   commits that missed a copy, replayed at their parent commit with and without seamreg, on 9 tasks with
-   3 runs each: Opus 5.5 kept every copy in step in 26 of 27 runs with seamreg and 17 without (1.5
-   times). Fable 5.2, 27 against 15 (1.8 times). Sonnet 5.5, on 17 tasks (7 of them among the 9), 28 of
-   36 against 13 (2.2 times). Without seamreg the most common failure is an agent that notices the stale
-   copy, says so, and leaves it.
+1. **Telling the agent to look for copies does most of the work. The registry adds more where it holds
+   the copy.** Real past commits that missed a copy, replayed at their parent commit, Sonnet 5.5, 23 tasks
+   from 6 repos with 3 runs each: 20 of 69 runs kept every copy in step with no help, 36 with a 137-word
+   CLAUDE.md section that says how to look for copies, and 41 with a reviewed registry and seamreg's
+   planning text. On the 9 tasks where a seam stated the rule, the registry kept every copy in step in 26
+   of 27 runs, the section 18 and no help 10. Where no seam stated it, the registry did no better than the
+   section. Earlier, without that control: on 9 tasks where the registry held the seam, Opus 5.5
+   kept every copy in step in 26 of 27 runs with seamreg and 17 without, and Fable 5.2 27 against 15.
+   Without seamreg the most common failure is an agent that notices the stale copy, says so, and leaves
+   it.
 2. **The weak link is getting the seam into the registry.** On the four newest benchmark repos, one blind
    first review recorded a third to a half of the seams an answer key lists, and caught 2 to 4 of 11 to 17
    known drifts. On older repos the range was much wider. On firefly-iii, reviews on Sonnet and on Opus
@@ -284,8 +288,42 @@ access check its siblings had. The project later fixed each one.
 
 ### Single-task replays
 
-These replays ran an early version of the tool (before 0.1), with no plugin and no CLAUDE.md: the
-registry reached the agent through its notes and the edit hook.
+These replays ran an early version of the tool (before 0.1), with no plugin. The registry reached the
+agent through its notes, the edit hook and seamreg's planning text in CLAUDE.md. None of these runs had a
+control with planning text and no registry: the next section has one.
+
+### Planning text alone, against the registry (Sonnet, 6 repos, 23 tasks)
+
+The 23 clean tasks of umami, memos, netbox, frigate, uptime-kuma and mattpocock/skills, 3 runs each, on
+tool 4be1ebe. The guidance arm got no registry and no seamreg, only a 137-word CLAUDE.md section: find the
+code you touch and its callers, look for code that looks like it and files that usually change with it
+(`git log --name-only`), search for the names, literals and keys you change in every language including
+schemas, migrations and configs, and put every copy in the plan.
+
+| Tasks | No help | Guidance only | Registry | Registry plus the guidance |
+|---|---|---|---|---|
+| All 23 (69 runs) | 20 | 36 | 41 | 42 |
+| 9 where a seam states the rule (27 runs) | 10 | 18 | **26** | 26 |
+| 13 where no seam states it (39 runs) | 10 | 18 | 15 | 16 |
+| 1 weak task, not judged (3 runs) | 0 | 0 | 0 | 0 |
+
+- "States the rule" was decided on 2026-11-16, before these runs, by reading every candidate seam per
+  task, as in the table above. A seam that only shares a file with the task does not count. A check by
+  file name alone overcounts: on the registries the agents got, it called 13 tasks covered, and on 4 of
+  them no seam stated the rule.
+- The registry's gain over the guidance came only where a seam stated the rule. Where none did, seamreg's
+  own planning text did about as well as the guidance (15 against 18 of 39, within noise).
+- The guidance added nothing on top of the registry, because seamreg's planning text already asks for the
+  same search. Since this run, `seams init` lists the planning text with the first setup steps, before any
+  review, and its last paragraph names the search.
+- The registry won on new copies that share no name with the change. One example is a column limited to
+  50 characters, where the code writing to it must cut values to 50. Searching for the field's name does
+  not lead to the limit, and every guidance run missed it.
+- Coverage is the limit: a seam stated the rule on 9 of 22 judged tasks. On the 3 tasks where agents
+  with the registry missed in all or nearly all runs, no seam held the rule. A read of those 18 runs'
+  transcripts found that the edit hook and the checker ran and printed the seams the registry held.
+- On netbox, frigate, uptime-kuma and mattpocock/skills alone (11 tasks): no help 7 of 33, guidance 12,
+  registry 13, both 13.
 
 | Model | Tasks | With seamreg | Without | Tasks better / worse / same |
 |---|---|---|---|---|
