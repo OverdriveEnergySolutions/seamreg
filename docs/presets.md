@@ -12,12 +12,22 @@ Costs here are API-equivalent dollars. On a Claude subscription you are not char
 | Drift check | Sonnet, max effort | Sonnet, max effort |
 | Lead check | Sonnet, high effort | Sonnet, max effort |
 | Risk re-rating | Opus, medium effort | Opus, max effort |
-| Measured on one 555-file repo | $27 to $32 | about $158 |
-| Known drifts found there, of 17 | 3 to 5, plus 1 to 2 partly | 8 to 9, plus 3 partly |
+| Measured cost | $27 to $64, on three repos of 555 to 2,792 files | about $158, on one 555-file repo |
+| Known drifts found | 3 to 5 of 11 to 17, plus up to 3 partly | 8 to 9 of 17, plus 3 partly |
 
-**standard** is the measured best value. Its lead check runs at high effort, which adds about 2 known drifts to a review for about $4. On the measured repo it cost about 20% of all-in.
+**standard** is the measured best value. Its lead check runs at high effort, which adds about 2 known drifts to a review for about $4. On vaultwarden, the one repo both presets ran on, it cost about 20% of all-in.
 
-The latest standard run skipped the libraries the repo copies in (jQuery, DataTables, Bootstrap and jdenticon), which were 40% of its review packet. It cost $26.58 and found 5 known drifts plus 1 partly, against $31.87 and 3 plus 1 before. The new drifts are all in the project's own code. One run cannot separate that gain from the one or two drifts runs differ by, but the lower cost holds: the review and the drift check had less to read.
+Since the scan skips the libraries a repo copies in (on vaultwarden jQuery, DataTables, Bootstrap and jdenticon, 40% of its review packet), two standard runs there both found 5 known drifts, plus 1 partly in one of them. The two runs before found 3 and 4. The new drifts are all in the project's own code. The runs cost $26.58 and $34.53.
+
+### Standard on three repos
+
+| Repo | Files | Session cost | Agents, spent against estimate | Known drifts | Key seams | Earlier first review of the same snapshot |
+|---|---|---|---|---|---|---|
+| vaultwarden | 555 | $26.58 and $34.53 | $20.48 and $26.15, against $21.72 | 5 plus 1 partly, and 5, of 17 | 6 plus 4 partly, and 8 plus 5 partly, of 20 | none |
+| dawarich | 2,792 | $55.81 | $45.42, against $43.37 | 5 plus 3 partly, of 16 | 8 plus 6 partly, of 20 | Opus $74.58: 4 plus 1 partly. Sonnet $42.66: 4 plus 2 partly |
+| plausible | 1,961 | $63.82 | $54.82, against $44.89 | 3, of 11 | 5 plus 5 partly, of 19 | Opus $91.76: 2. Four more passes, $80.54 more: still 2 |
+
+The earlier reviews ran older versions of the tool, so each difference is the tool and the preset together. The session cost adds the main session that runs the agents to what the agents spent. The agents came in at 94% to 122% of their estimate. Every cost here is one run. None of the 80 claims sampled from these four runs outside the keys was false.
 
 **all-in** runs every step at max effort. Its lead check reads much further beyond each lead's own files. That found two to three times the known drifts of standard, for about five times the price. Most of the extra cost is the lead check: $109.08 and $129.54 at max in two runs, against $2.76 and $4.44 at high.
 
