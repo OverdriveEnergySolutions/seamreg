@@ -105,9 +105,10 @@ Claude Code runs these automatically:
   pre-PR scan. It counts the branch's commits too, so it still works when the agent commits first.
 
 ### Planning text
-A paragraph `seams init` writes into `CLAUDE.md` or `AGENTS.md`. It tells planning agents to ask the
-registry before they commit to a plan, to update every stale copy, to record a copy they find even if
-they leave it alone, and to run the pre-PR scan.
+A section `seams init` prints for you to paste into `CLAUDE.md` or `AGENTS.md`, before the first review.
+It tells planning agents to ask the registry before they commit to a plan, to search for copies nobody
+listed, to update every stale copy, to record a copy they find even if they leave it alone, and to run
+the pre-PR scan.
 
 ### Pre-PR scan
 `seams scan --since <base branch> --new`: a scan of only the leads this branch may have created. An agent
@@ -167,6 +168,14 @@ One round of agents over the repo. Each pass adds to the registry:
 | Tie | `seams tie <id>` | One agent writes a test that fails when a seam's copies disagree. |
 
 `seams next` ranks the passes worth running next. [passes.md](passes.md) lists what each cost.
+
+### Preset, settings file and run record
+A **preset** names the model and the effort for each paid step: the review, the drift check, the lead check
+and the risk re-rating. There are two, standard and all-in. `seams presets` shows both with this repo's
+estimated cost. The **settings file**, `seams.settings.json`, holds the preset a team saved and only the
+settings it changed. A **run record** (`.seams-scan/runs/`) holds one paid run: its preset, its estimate
+and what each agent really cost and the model and effort it ran at. [presets.md](presets.md) explains
+them.
 
 ### Merge, plan and apply
 `seams merge` turns the agents' findings into a proposed registry, `.seams-scan/seams.proposed.json`, and a

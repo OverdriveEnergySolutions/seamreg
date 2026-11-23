@@ -68,6 +68,48 @@ def is_minified(head):
     return long >= 3 or sum(map(len, lines)) / max(1, len(lines)) > 300
 
 
+# A copied-in library: its opening comment names it with a version and carries a license or
+# copyright line (jQuery, Bootstrap and DataTables in a static folder), or its file name has a version.
+_COMMENT_LINE = re.compile(r"^\s*(/\*|\*|//|<!--|$)")
+_LIB_VERSION = re.compile(r"\b[A-Z][\w.\-]*(?: [A-Z][\w.\-]*){0,3}:? v?\d+\.\d+(?:\.\d+)?\b")
+_LIB_LICENSE = re.compile(r"licen[cs]e|copyright|\(c\)|\u00a9", re.I)
+_NOT_A_LIBRARY = {"Version", "License", "Licence", "Licensed", "Apache", "GNU", "GPL", "LGPL", "AGPL", "MIT",
+                  "BSD", "MPL", "Copyright", "Revision", "Release", "Since", "Updated", "Built", "Date"}
+# "Eclipse Public License v2.0", "Boost Software License 1.0" and "Creative Commons Attribution 4.0" name a
+# license, never a library.
+_LICENSE_WORD = re.compile(r"\b(?:Licen[cs]e[sd]?|Public|Software|Attribution)\b")
+# The first word of the holder in a copyright line: "Copyright (c) 2023 Acme" gives "Acme".
+_HOLDER = re.compile(r"(?i:copyright|\(c\)|\u00a9)[ \t]*(?:\(c\)|\u00a9)?[ \t]*(?:[\d,\- ]+)?(?:(?i:by)[ \t]+)?([A-Z][\w.\-]*)")
+_VERSIONED_NAME = re.compile(r"^[A-Za-z][\w\-]*?[-.]v?\d+\.\d+\.\d+(?:[-.+][\w]+)*\.(?:js|mjs|cjs|css)$")
+
+
+def vendored(path, head):
+    """Why a file is a copied-in library, or None. Only the comment block that opens the file
+    counts, so a project's own file that mentions a library further down stays in."""
+    if _VERSIONED_NAME.match(path.rsplit("/", 1)[-1]):
+        return "vendored: version in the file name"
+    lines = []
+    for line in head.split("\n")[:60]:
+        if not _COMMENT_LINE.match(line):
+            break
+        lines.append(line)
+    opening = "\n".join(lines)
+    if not _LIB_LICENSE.search(opening):
+        return None
+    holders = {h.group(1) for h in _HOLDER.finditer(opening)}
+    for found in _LIB_VERSION.finditer(opening):
+        words = found.group(0).split()
+        # "Apache License, Version 2.0" names a license, not a library.
+        if words[0].rstrip(":") in _NOT_A_LIBRARY or _LICENSE_WORD.search(found.group(0)):
+            continue
+        # "Acme Billing Engine 4.2.1" under "Copyright (c) 2023 Acme" is the holder's own product. A holder
+        # name alone with a version ("Acme 4.2.1") still counts, since a library is often named for its author.
+        if words[0] in holders and len(words) >= 3:
+            continue
+        return f"vendored: {found.group(0).strip()}"
+    return None
+
+
 def is_test(path):
     parts = path.split("/")
     return bool(TEST_PARTS & set(parts[:-1])) or bool(_TEST_NAME.match(parts[-1]))
@@ -158,6 +200,10 @@ class Inventory:
             head = text[:4000]
             if is_minified(head):
                 self.skipped[p] = "minified"
+                continue
+            why = vendored(p, head)
+            if why:
+                self.skipped[p] = why
                 continue
             if is_own(p, head):
                 self.own.append(p)

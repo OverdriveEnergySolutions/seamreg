@@ -18,7 +18,7 @@ seams scan            # writes candidate seams to .seams-scan/leads.md
 seams check           # fails when seams.json no longer matches the repo
 ```
 
-`seams init` copies the checker into your repo, so CI needs no install and no network. It is one file that uses only the Python standard library. It prints the setup snippets: a CI workflow, a Claude Code hook, a commit check, and two items for after the first review. For the commit check, it says which form fits your repo, or that your repo has no commit-hook setup that git tracks. They also live in [`src/seams/snippets/`](../src/seams/snippets/).
+`seams init` copies the checker into your repo, so CI needs no install and no network. It is one file that uses only the Python standard library. It prints the setup snippets: a CI workflow, a Claude Code hook, a commit check, the planning text for `CLAUDE.md` or `AGENTS.md`, and two items for after the first review. For the commit check, it says which form fits your repo, or that your repo has no commit-hook setup that git tracks. They also live in [`src/seams/snippets/`](../src/seams/snippets/).
 
 When a new release changes the checker, run `seams init --upgrade`. `seams check` warns when your copy is a different version.
 
@@ -120,6 +120,8 @@ Some things to know:
 - **Cursor and Copilot take one comma-separated list of paths.** A copy whose path holds a comma is left out of those notes, with a warning.
 - **Tested so far in Claude Code only.** The Cursor, Copilot and `AGENTS.md` notes follow each tool's documentation, read on 2026-11-15.
 
+Saved presets live in their own file, `seams.settings.json`, not in `seams.json`, so an older checker copy in CI never sees them. [presets.md](presets.md#saving-a-preset) explains it.
+
 When the notes fall behind `seams.json`, the plain check fails in CI. When you drop a value from `"notes"`, `seams notes` removes its notes. It never touches a file it did not write.
 
 The full loop:
@@ -148,7 +150,7 @@ A full review is expensive, and most of what it reads is noise it already reject
 
 ```sh
 seams scan --new                 # leads.md shows only new leads
-seams split --new-only           # packets hold only new leads; reviewers check leads, not whole areas
+seams split --new-only           # packets hold only new leads and the folders they touch
 # run the seam-reviewer agents, then:
 seams merge --apply              # writes seams.json and adds this scan's leads to the baseline
 ```
@@ -181,4 +183,4 @@ Check where your agent looks for skills. `~/.agents/skills` and `.agents/skills`
 
 ## What the scan reads
 
-The scan reads the repo once, with no agent and no network. It reads code, config, JSON and Markdown docs. It looks for sync comments, copied code, a named date format with a file beside its users that writes dates another way, the same list of names in two files (code, JSON or docs, including a doc list split under several headings), shared constants, function and env var names, and tests that may already tie copies. It also reads the git history for files in different folders that keep changing in the same commits, which points at seams that share no text: a doc that describes a script, a payload built in one service and read in another. It skips its own files: the registry, the notes and the copied checker. `plan.md` names every file it left unread, and why.
+The scan reads the repo once, with no agent and no network. It reads code, config, JSON and Markdown docs. It looks for sync comments, copied code, a named date format with a file beside its users that writes dates another way, the same list of names in two files (code, JSON or docs, including a doc list split under several headings), shared constants, function and env var names, and tests that may already tie copies. It also reads the git history for files in different folders that keep changing in the same commits, which points at seams that share no text: a doc that describes a script, a payload built in one service and read in another. It skips its own files: the registry, the notes and the copied checker. It also skips dependency folders, minified and generated files, and libraries copied into the repo: a file whose opening comment names a library with a version and a license, such as jQuery or Bootstrap in a static folder, or whose file name carries a version (`jquery-4.0.0.slim.js`). `plan.md` names every file it left unread, and why.

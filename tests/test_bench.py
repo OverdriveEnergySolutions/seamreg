@@ -127,3 +127,25 @@ def test_the_scan_flags_the_workspace_itself_and_a_climb_before_a_newline(tmp_pa
 def test_the_scan_flags_permission_changes_in_any_form():
     for t in ("chmod 755 ../key", "/usr/bin/chmod 7 x", "os.chmod(p, 0o755)", "fs.chownSync(p)", "shutil.chown(p)", "install -m 644 a b"):
         assert blindscan.PERMS.search(t), t
+
+
+def _dry(preset):
+    import os
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "PRESET": preset, "DRY_RUN": "1"}
+    return subprocess.run(["bash", str(root / "bench/session.sh"), str(root), "x", str(root / "bench/README.md")],
+                          env=env, capture_output=True, text=True, timeout=30)
+
+
+def test_a_preset_run_answers_with_its_preset_and_restarts_a_refused_agent():
+    got = _dry("standard")
+    assert got.returncode == 0
+    assert "Use the standard preset" in got.stdout
+    assert "start the agent again with the model and effort the refusal names" in got.stdout
+    assert "ceiling" not in got.stdout
+
+
+def test_an_unknown_preset_stops_before_anything_runs():
+    got = _dry("cheap")
+    assert got.returncode == 1 and "PRESET must be standard or all-in" in got.stderr

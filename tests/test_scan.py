@@ -273,3 +273,59 @@ def test_the_tools_own_files_are_not_counted_as_not_scanned(tmp_path):
     (tmp_path / "a.py").write_text("x = 1\n")
     doc = scan.scan(tmp_path)
     assert "json" not in doc["skipped_types"] and doc["skipped_files"] == {}
+
+
+def test_a_copied_in_library_is_skipped_and_listed():
+    from seams.scan.inventory import vendored
+    bootstrap = ("/*!\n  * Bootstrap v5.3.8 (https://getbootstrap.com/)\n  * Copyright 2011-2025 The Bootstrap Authors\n"
+                 "  * Licensed under MIT\n  */\n(function (global, factory) {\n")
+    tables = ("/*\n * This combined file was created by the DataTables downloader builder\n */\n\n"
+              "/*! DataTables 2.3.8\n * © SpryMedia Ltd - datatables.net/license\n */\n\n(function(\n")
+    assert vendored("src/static/scripts/bootstrap.bundle.js", bootstrap) == "vendored: Bootstrap v5.3.8"
+    assert vendored("src/static/scripts/datatables.js", tables) == "vendored: DataTables 2.3.8"
+    assert vendored("src/static/scripts/jdenticon-3.3.0.js", "var x = 1;\n") == "vendored: version in the file name"
+    assert vendored("lib/jquery-4.0.0.slim.js", "") == "vendored: version in the file name"
+
+
+def test_a_projects_own_file_is_not_a_library():
+    from seams.scan.inventory import vendored
+    own = '"use strict";\n/* eslint-env browser */\n// Uses Bootstrap v5.3.8, Copyright The Bootstrap Authors\n'
+    apache = ("// Copyright 2024 Google LLC\n//\n// Licensed under the Apache License, Version 2.0 (the \"License\");\n"
+              "\nimport { x } from './y';\n")
+    later = "const a = 1;\n/* Bootstrap v5.3.8, Licensed under MIT */\n"
+    assert vendored("src/static/scripts/admin.js", own) is None
+    assert vendored("web/src/types/proto/http_pb.ts", apache) is None
+    assert vendored("web/app.js", later) is None
+    assert vendored("migrations/2024-01-01-000000_init.sql", "") is None
+
+
+def test_the_inventory_skips_a_library_and_says_why(tmp_path):
+    from seams.scan.inventory import Inventory
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "jquery-4.0.0.slim.js").write_text("(function(){})();\n")
+    (tmp_path / "static" / "app.js").write_text("function go() { return 1; }\n")
+    inv = Inventory(tmp_path)
+    assert inv.read == ["static/app.js"]
+    assert inv.skipped == {"static/jquery-4.0.0.slim.js": "vendored: version in the file name"}
+
+
+@pytest.mark.parametrize("name", ["Eclipse Public License v2.0", "Mozilla Public License Version 2.0",
+                                  "Boost Software License 1.0", "Creative Commons Attribution 4.0"])
+def test_a_license_name_with_a_version_is_not_a_library(name):
+    from seams.scan.inventory import vendored
+    assert vendored("src/Main.java", f"/*\n * This program is made available under the {name}\n * Copyright 2024\n */\n") is None
+    assert vendored("src/Main.java", f"// {name}\n// Licensed to the project\n") is None
+
+
+def test_the_holders_own_product_is_not_a_library():
+    from seams.scan.inventory import vendored
+    own = "// Copyright (c) 2023 Acme\n// Acme Billing Engine 4.2.1\n"
+    assert vendored("src/billing.js", own) is None
+
+
+def test_real_library_headers_are_still_skipped():
+    from seams.scan.inventory import vendored
+    jq = "/*!\n * jQuery JavaScript Library v3.7.1\n * Copyright OpenJS Foundation and other contributors\n * Released under the MIT license\n */\n"
+    jd = "/**\n * Jdenticon 3.2.0\n * Copyright 2014-2024 Daniel Mester Pirttijarvi\n * Released under the MIT license\n */\n"
+    assert vendored("a/jquery.js", jq) == "vendored: JavaScript Library v3.7.1"
+    assert vendored("a/jdenticon.js", jd) == "vendored: Jdenticon 3.2.0"

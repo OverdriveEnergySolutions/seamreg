@@ -16,4 +16,4 @@ When you find knowledge that another file must match and no seam lists it, add t
 
 Before you open a pull request, if the `seams` command is installed, run `seams scan --since <base branch> --new`. Each lead it lists may be a seam this branch created. Add the real ones to `seams.json` in the same pull request.
 
-The registry is not complete. A copy nobody listed does not show up in it.
+The registry is not complete. A copy nobody listed does not show up in it, so look for those too: search for the names, literals and keys you change across every language in the repo, including schemas, migrations, configs and tests, and look at the files that usually change with yours (`git log --name-only` on them).

@@ -290,7 +290,7 @@ def _walk(schema):
 
 def test_validator_implements_every_keyword_the_schema_uses():
     # A keyword the validator ignores would be printed in the schema but never enforced.
-    for node in _walk(check.SCHEMA):
+    for node in [*_walk(check.SCHEMA), *_walk(check.SETTINGS_SCHEMA)]:
         assert set(node) <= check.SUPPORTED, set(node) - check.SUPPORTED
         types = node.get("type", [])
         for t in types if isinstance(types, list) else [types]:

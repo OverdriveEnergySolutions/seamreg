@@ -57,8 +57,8 @@ uv tool install git+https://github.com/OverdriveEnergySolutions/seamreg
 # or: pipx install git+https://github.com/OverdriveEnergySolutions/seamreg
 ```
 
-In your repo, ask Claude to **"find this repo's seams"**. It tells you what the review will cost and
-waits for your yes before it starts. When it finishes, it sets up the hooks, the notes and the CI check.
+In your repo, ask Claude to **"find this repo's seams"**. It shows two presets, standard and all-in,
+with what each would cost on your repo, and waits for your choice before it starts. When it finishes, it sets up the hooks, the notes and the CI check.
 
 Other agents (Codex, Cursor, Copilot and others) can use the skills, the checker and the MCP server,
 though we have tested them only in Claude Code. See
@@ -66,14 +66,25 @@ though we have tested them only in Claude Code. See
 
 ## What it costs
 
-A first review of a mid-sized repo is roughly the size of an hour or two of heavy agent work: $40 to $115
-in API-equivalent terms on the repos we tried, and about 40% less on Sonnet. On a Claude subscription you
-are not charged that amount: it counts against your plan's usage. Afterwards, the checker and the lookups
-cost nothing, and an agent working with the registry costs about twice as much per task, because it
-reads the warnings. [docs/passes.md](docs/passes.md) has the measured figures for every step.
+You choose how much to spend. On a 555-file repo, the **standard** preset (a Sonnet review, a drift
+check, a lead check and an Opus risk re-rating) cost about $30 in API-equivalent terms, and **all-in**
+(every step at max effort) about $155 and found about twice the known drifts. On a Claude subscription
+you are not charged those amounts: they count against your plan's usage. A run stops and asks when it
+reaches its estimate. Afterwards, the checker and the lookups cost nothing, and an agent working
+with the registry costs about twice as much per task, because it reads the warnings.
+[docs/presets.md](docs/presets.md) explains each preset and setting, and [docs/passes.md](docs/passes.md)
+has the measured figures for every step.
 
-Without a review, a cheaper lead check builds a registry for about a quarter of the price, and gets
-about half the benefit.
+Much of the prevention comes free, from a short CLAUDE.md section. On 23 real past commits from 6 repos,
+Sonnet agents kept every copy in step in 20 of 69 runs with no help, 36 with a short CLAUDE.md section
+that tells them to look for copies, and 41 with a reviewed registry. Where a seam in the registry stated
+the rule the agent had to keep (9 tasks, judged by reading before the runs), the registry kept every copy
+in step in 26 of 27 runs, against 18 for the section and 10 with no help. Where no seam stated it, the
+registry did no better than the section. seamreg's planning text asks for the same search, so
+`seams init` gives it to you before any review, and the review adds the rules a search cannot find.
+
+There is no cheaper preset yet. A lead check without a review barely beat no registry at all (16 of 36
+runs against 13).
 
 ## The words
 

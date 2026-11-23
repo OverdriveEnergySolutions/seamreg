@@ -51,7 +51,7 @@ import stat
 import sys
 from pathlib import Path
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 REGISTRY = "seams.json"
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__",
@@ -163,6 +163,69 @@ SCHEMA = {
         "seams": {"type": "array", "items": _SEAM},
     },
 }
+
+# --- saved settings --------------------------------------------------------
+# A team's saved preset lives in its own file, never in seams.json: a team's CI runs
+# its own copy of this checker, and an older copy rejects any new field in seams.json.
+# This file holds the names and allowed values. seams/presets.py holds what each
+# preset runs; nothing else states a preset's values.
+
+SETTINGS = "seams.settings.json"
+PRESETS = ("standard", "all-in")
+STEPS = ("review", "drift_check", "lead_check", "rerate")
+MODELS = ("sonnet", "opus", "haiku", "fable")
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+DIFF_LIMITS = (5, 10, 15, 20, 25, 30, 40, 50, 75, 100)  # percent of a full run on the same preset
+DEFAULT_DIFF_LIMIT = 25
+
+_STEP_SETTINGS = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "model": {"type": "string", "enum": list(MODELS)},
+        "effort": {"type": "string", "enum": list(EFFORTS)},
+    },
+}
+
+SETTINGS_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Seams settings",
+    "description": "The preset a team saved for paid seamreg runs, and only the settings it changed. "
+                   "A newer seamreg's definition of the preset applies to everything not listed here.",
+    "type": "object",
+    "required": ["schema_version", "preset"],
+    "additionalProperties": False,
+    "properties": {
+        "schema_version": {"const": 1},
+        "preset": {"type": "string", "enum": list(PRESETS),
+                   "description": "standard or all-in. `seams presets` shows what each one runs."},
+        "changes": {"type": "object", "additionalProperties": False,
+                    "properties": {step: _STEP_SETTINGS for step in STEPS},
+                    "description": "Per step, the model or effort the team set by hand."},
+        "diff_limit_percent": {"type": "integer", "enum": list(DIFF_LIMITS),
+                               "description": "A diff scan runs without asking while its estimate stays "
+                               f"under this share of a full run on the same preset. Default {DEFAULT_DIFF_LIMIT}."},
+    },
+}
+
+
+def settings_errors(root):
+    """Problems with <root>/seams.settings.json. No file means no problems."""
+    path = Path(root) / SETTINGS
+    if not path.is_file():
+        return []
+    try:
+        data = load(path)
+    except json.JSONDecodeError as e:
+        return [f"{SETTINGS}: not valid JSON at line {e.lineno}, column {e.colno}: {e.msg}"]
+    except DuplicateKey as e:
+        return [f"{SETTINGS}: {e}"]
+    except UnicodeDecodeError:
+        return [f"{SETTINGS}: not UTF-8 text. Save it as UTF-8."]
+    errors = []
+    validate(data, SETTINGS_SCHEMA, SETTINGS, errors)
+    return errors
+
 
 SUPPORTED = {"$schema", "title", "description", "type", "required", "additionalProperties",
              "properties", "items", "enum", "const", "minLength", "minItems", "pattern", "anyOf"}
@@ -1415,7 +1478,7 @@ def main(argv=None):
               f"{len(untied)} of them have no full tie.")
         return 1 if args.fail_untied and untied else 0
 
-    errors = check(data, root)
+    errors = check(data, root) + settings_errors(root)
     if not errors and data.get("notes"):
         want, note_errors, _ = plan_notes(data, root)
         errors += note_errors

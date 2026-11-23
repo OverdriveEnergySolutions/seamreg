@@ -81,6 +81,12 @@ transcripts for leaks, grades the run and writes one result file. Open a pull re
 after review it joins the published statistics. A result that does not favor seamreg is as welcome as one
 that does.
 
+**A new or changed preset** needs the same proof as a pass. A cheaper preset joins only when a
+configuration of it passes the prevention replay test against two baselines, no registry and a reviewed
+one. A changed rate in `src/seams/presets.py` names the runs it came from in
+[docs/presets.md](docs/presets.md). If a run's actual cost lands more than 30% from its estimate, report it
+with the run's `seams spend --json`.
+
 If you find a new question worth measuring, add a kind of benchmark: [bench/kinds/README.md](bench/kinds/README.md)
 says how. To ask us to run a benchmark instead, open an issue with the **Benchmark request** template.
 

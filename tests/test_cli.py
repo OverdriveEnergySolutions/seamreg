@@ -17,7 +17,9 @@ def test_init_copies_the_checker_unchanged_and_starts_an_empty_registry(tmp_path
     assert json.loads((tmp_path / "seams.json").read_text()) == cli.EMPTY_REGISTRY
     out = capsys.readouterr().out
     assert "run: python3 scripts/seams_check.py" in out
-    assert out.index("Add these now") < out.index("After the first review") < out.index("Planning")
+    # Planning comes before the first review: measured on 23 replayed commits, the planning text alone
+    # helps as much as the registry does where the registry does not yet hold the copy.
+    assert out.index("Add these now") < out.index("Planning") < out.index("After the first review")
 
 
 def test_the_copied_checker_runs_alone(tmp_path):

@@ -2,7 +2,7 @@
 
 Building a registry takes several passes. The first review finds a third to a half of a repo's seams on the newer benchmarks, and the range is wider across all of them. After it, `seams next` ranks the passes worth running next, from the repo's leads and from what each earlier pass added. This page lists the passes, what each one cost on public repos, and when to run them side by side.
 
-Every number here is measured, not estimated. Each one names the model and the effort it ran at. A cell that says "not measured" means nobody has run it yet.
+To choose what a run spends, start at [presets.md](presets.md): the two presets, each setting, and the rates behind this repo's estimate. Every number here is measured, not estimated. Each one names the model and the effort it ran at. A cell that says "not measured" means nobody has run it yet.
 
 **The dollar figures are API-equivalent.** They are the cost Claude Code reports for each session. We ran everything on a Claude subscription, and on a subscription you are not charged these amounts: the work counts against your plan's usage. Read them as relative sizes, to compare passes and models. Your numbers will differ with your repo and your model.
 
@@ -92,6 +92,7 @@ Also watch the account's rate limits. Five max-effort sessions ran side by side 
 ## Not measured yet
 
 - Reviewers on Sonnet on more than two repos, on Haiku, or at any effort below max.
+- The risk re-rating at any effort but Opus's default (medium), which all-in's estimate needs.
 - The `siblings` pass on any repo but netbox.
 - A focused pass split into packets that run side by side.
 - Lead checks on a repo the lead kinds were not tuned on.

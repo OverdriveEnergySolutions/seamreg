@@ -1,0 +1,28 @@
+{
+  "description": "seamreg: during a paid run, refuse a seamreg agent that does not start at its step's model and effort, and record what each one really costs. Both do nothing outside an open run.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CLAUDE_PLUGIN_ROOT}/src/seams/spend.py\"; [ -f \"$f\" ] && command -v python3 >/dev/null 2>&1 || exit 0; python3 -I \"$f\" pre-tool-use || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CLAUDE_PLUGIN_ROOT}/src/seams/spend.py\"; [ -f \"$f\" ] && command -v python3 >/dev/null 2>&1 || exit 0; python3 -I \"$f\" subagent-stop || true",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
