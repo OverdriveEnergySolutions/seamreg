@@ -105,9 +105,10 @@ Claude Code runs these automatically:
   pre-PR scan. It counts the branch's commits too, so it still works when the agent commits first.
 
 ### Planning text
-A paragraph `seams init` writes into `CLAUDE.md` or `AGENTS.md`. It tells planning agents to ask the
-registry before they commit to a plan, to update every stale copy, to record a copy they find even if
-they leave it alone, and to run the pre-PR scan.
+A section `seams init` prints for you to paste into `CLAUDE.md` or `AGENTS.md`, before the first review.
+It tells planning agents to ask the registry before they commit to a plan, to search for copies nobody
+listed, to update every stale copy, to record a copy they find even if they leave it alone, and to run
+the pre-PR scan.
 
 ### Pre-PR scan
 `seams scan --since <base branch> --new`: a scan of only the leads this branch may have created. An agent

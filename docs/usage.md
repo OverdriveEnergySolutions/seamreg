@@ -18,7 +18,7 @@ seams scan            # writes candidate seams to .seams-scan/leads.md
 seams check           # fails when seams.json no longer matches the repo
 ```
 
-`seams init` copies the checker into your repo, so CI needs no install and no network. It is one file that uses only the Python standard library. It prints the setup snippets: a CI workflow, a Claude Code hook, a commit check, and two items for after the first review. For the commit check, it says which form fits your repo, or that your repo has no commit-hook setup that git tracks. They also live in [`src/seams/snippets/`](../src/seams/snippets/).
+`seams init` copies the checker into your repo, so CI needs no install and no network. It is one file that uses only the Python standard library. It prints the setup snippets: a CI workflow, a Claude Code hook, a commit check, the planning text for `CLAUDE.md` or `AGENTS.md`, and two items for after the first review. For the commit check, it says which form fits your repo, or that your repo has no commit-hook setup that git tracks. They also live in [`src/seams/snippets/`](../src/seams/snippets/).
 
 When a new release changes the checker, run `seams init --upgrade`. `seams check` warns when your copy is a different version.
 
