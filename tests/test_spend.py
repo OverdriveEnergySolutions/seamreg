@@ -637,3 +637,69 @@ def test_a_closed_run_reopened_in_the_record_is_ignored(tmp_path):
     _plant(out, run_id=run["id"])  # the same id, marked open again
     assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer", model="opus")) is None
     assert not list((out / "runs" / run["id"]).glob("start-*.json"))
+
+
+def test_a_failed_marker_write_leaves_no_open_run(tmp_path, monkeypatch):
+    root, out = repo(tmp_path)
+    monkeypatch.setenv("XDG_STATE_HOME", "/proc/nope")
+    with pytest.raises(OSError):
+        start(out)
+    assert spend.open_run(out) is None
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    assert start(out)["status"] == "open"  # a retry is not told a run is still open
+
+
+def test_a_malformed_usage_value_or_effort_still_gives_a_record(tmp_path):
+    line = {"message": {"id": "m1", "model": "claude-sonnet-5-5",
+                        "usage": {"input_tokens": "12k", "output_tokens": 100}}, "effort": ["high"]}
+    path = tmp_path / "t.jsonl"
+    path.write_text(json.dumps(line) + "\n")
+    got = spend.transcript_cost(path)
+    assert got["messages"] == 1 and got["efforts"] == [] and got["tokens"]["output"] == 100
+    (tmp_path / "r").mkdir()
+    root, out = repo(tmp_path / "r")
+    start(out)
+    spend.on_pre_tool_use(pre_payload(root))
+    payload = stop_payload(root)
+    payload["agent_transcript_path"] = str(path)
+    spend.on_subagent_stop(payload)
+    assert len(spend.state(out)["agents"]) == 1
+
+
+def test_a_start_from_a_session_that_lost_the_binding_race_is_not_recorded(tmp_path, monkeypatch):
+    # Session B passes the unlocked check while the run is unbound, then A binds it before B holds the lock.
+    root, out = repo(tmp_path)
+    start(out)
+    real = spend._locked
+
+    @__import__("contextlib").contextmanager
+    def racing(folder, *a, **k):
+        spend._bound(folder, "sess-A")
+        with real(folder, *a, **k):
+            yield
+
+    monkeypatch.setattr(spend, "_locked", racing)
+    assert spend.on_pre_tool_use(pre_payload(root, session="sess-B")) is None
+    assert spend.state(out)["running"] == 0
+
+
+def test_a_hook_touches_nothing_through_a_symlinked_record_even_when_it_is_damaged(tmp_path):
+    root, out = subrepo(tmp_path, "repo")
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "runs.json").write_text("{broken")
+    out.mkdir()
+    (out / "runs").symlink_to(victim)
+    before = sorted(p.name for p in victim.iterdir())
+    assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")) is None
+    assert spend.on_subagent_stop(stop_payload(root, agent="seam-reviewer")) is None
+    assert sorted(p.name for p in victim.iterdir()) == before
+
+
+def test_a_hook_never_moves_a_damaged_run_record(tmp_path):
+    root, out = repo(tmp_path)
+    (out / "runs").mkdir(parents=True)
+    (out / "runs" / "runs.json").write_text("{broken")
+    assert spend.on_pre_tool_use(pre_payload(root, agent="seam-reviewer")) is None
+    assert spend.on_subagent_stop(stop_payload(root, agent="seam-reviewer")) is None
+    assert sorted(p.name for p in (out / "runs").iterdir()) == ["runs.json"]

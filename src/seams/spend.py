@@ -142,7 +142,11 @@ _PARTS = ("input", "output", "cache_write_5m", "cache_write_1h", "cache_read")
 def _parts(u):
     """Token counts in the price table's order. A cache write is 5-minute unless the usage
     splits out 1-hour writes, which cost more."""
-    n = lambda v: int(v or 0)
+    def n(v):
+        try:
+            return int(v or 0)
+        except (TypeError, ValueError):
+            return 0  # a malformed count is unknown, so it adds nothing
     written = n(u.get("cache_creation_input_tokens"))
     split = u.get("cache_creation") if isinstance(u.get("cache_creation"), dict) else {}
     hour = n(split.get("ephemeral_1h_input_tokens"))
@@ -173,7 +177,7 @@ def transcript_cost(path):
         key = m.get("id") or d.get("requestId") or f"line{len(usage)}"
         usage[key] = m["usage"]
         model_of[key] = m.get("model") or "unknown"
-        if d.get("effort"):
+        if isinstance(d.get("effort"), str) and d["effort"]:
             efforts.add(d["effort"])
     parts = {k: _parts(u) for k, u in usage.items()}
     tokens = {f: sum(p[i] for p in parts.values()) for i, f in enumerate(_PARTS)}
@@ -192,14 +196,17 @@ def _dir(out):
     return Path(out) / RUNS
 
 
-def _header(out):
-    """The header, or a fresh one. A damaged header is set aside, with a warning."""
+def _header(out, repair=True):
+    """The header, or a fresh one. A damaged header is set aside, with a warning. A hook passes
+    repair=False: it only reads, so it never moves a file in the user's repo."""
     path = _dir(out) / HEADER
     if not path.exists():
         return {"runs": []}
     data = _read(path)
     if isinstance(data, dict) and isinstance(data.get("runs"), list):
         return data
+    if not repair:
+        return {"runs": []}
     aside = path.with_name(f"{HEADER}.damaged-{datetime.datetime.now():%Y%m%d%H%M%S}")
     os.replace(path, aside)
     print(f"seams: the run record was damaged; set aside as {aside.name}", file=sys.stderr)
@@ -218,8 +225,8 @@ def _open_of(head):
     return run if run and run.get("status") == "open" else None
 
 
-def open_run(out):
-    return _open_of(_header(out))
+def open_run(out, repair=True):
+    return _open_of(_header(out, repair))
 
 
 def last_finished(out):
@@ -261,9 +268,16 @@ def start(out, settings, estimate, per_packet):
            "sources": {s: {k: v["source"] for k, v in f.items()} for s, f in settings["steps"].items()},
            "estimate": estimate, "per_packet": per_packet}
     head["runs"].append(run)
-    _write(_dir(out) / HEADER, head)
-    _write(_marker(out), {"run": run["id"], "record": str(Path(out).resolve()), "started": run["started"],
-                          "status": "open", "preset": run["preset"], "settings": run["settings"]})
+    # The marker goes first. A failed marker write then leaves no open run that the hooks would not enforce.
+    marker = _marker(out)
+    _write(marker, {"run": run["id"], "record": str(Path(out).resolve()), "started": run["started"],
+                    "status": "open", "preset": run["preset"], "settings": run["settings"]})
+    try:
+        _write(_dir(out) / HEADER, head)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            marker.unlink()
+        raise
     return run
 
 
@@ -344,6 +358,12 @@ def _out_for(payload):
     return None
 
 
+def _guarded(out):
+    """True when no level of the record is a symlink. A hook checks this before it reads, renames or
+    writes anything of the run record."""
+    return not any(p.is_symlink() for p in (Path(out), _dir(out), _dir(out) / HEADER))
+
+
 def _hook_folder(out, run):
     """The run's folder, for the hooks to write in, or None. A target repo can commit its own
     .seams-scan, so a symlink at any level of the record (or out of the repo) is refused: the
@@ -377,7 +397,7 @@ def on_pre_tool_use(payload):
     if not step:
         return None
     out = _out_for(payload)
-    run = _trusted(out, open_run(out)) if out else None
+    run = _trusted(out, open_run(out, repair=False)) if out and _guarded(out) else None
     folder = _hook_folder(out, run) if run else None
     if folder is None:
         return None
@@ -389,8 +409,11 @@ def on_pre_tool_use(payload):
         return _deny(wrong)
     try:
         with _locked(folder):
-            if (_read(folder / "session.json") or {}).get("id") is None:
+            bound = (_read(folder / "session.json") or {}).get("id")
+            if bound is None:
                 _bound(folder, payload.get("session_id"))
+            elif bound != payload.get("session_id"):
+                return None  # another start bound the run to a different session while this one waited
             _write(folder / f"start-{uuid.uuid4().hex}.json", {"step": step, "at": _now()})
     except TimeoutError:
         return _deny("seams: the run record is busy, so this start cannot be recorded. "
@@ -435,7 +458,7 @@ def on_subagent_stop(payload):
     if not step:
         return None
     out = _out_for(payload)
-    run = _trusted(out, _recording(out), open_only=False) if out else None
+    run = _trusted(out, _recording(out), open_only=False) if out and _guarded(out) else None
     folder = _hook_folder(out, run) if run else None
     if folder is None:
         return None
@@ -454,7 +477,7 @@ def on_subagent_stop(payload):
 
 def _recording(out):
     """The run a finishing agent belongs to: the open run, or a run stopped while agents still ran."""
-    run = _last(_header(out))
+    run = _last(_header(out, repair=False))
     if run and (run.get("status") == "open" or (run.get("status") == "stopped" and run.get("running"))):
         return run
     return None
