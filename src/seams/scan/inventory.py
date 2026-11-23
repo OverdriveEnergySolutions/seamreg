@@ -75,6 +75,11 @@ _LIB_VERSION = re.compile(r"\b[A-Z][\w.\-]*(?: [A-Z][\w.\-]*){0,3}:? v?\d+\.\d+(
 _LIB_LICENSE = re.compile(r"licen[cs]e|copyright|\(c\)|\u00a9", re.I)
 _NOT_A_LIBRARY = {"Version", "License", "Licence", "Licensed", "Apache", "GNU", "GPL", "LGPL", "AGPL", "MIT",
                   "BSD", "MPL", "Copyright", "Revision", "Release", "Since", "Updated", "Built", "Date"}
+# "Eclipse Public License v2.0", "Boost Software License 1.0" and "Creative Commons Attribution 4.0" name a
+# license, never a library.
+_LICENSE_WORD = re.compile(r"\b(?:Licen[cs]e[sd]?|Public|Software|Attribution)\b")
+# The first word of the holder in a copyright line: "Copyright (c) 2023 Acme" gives "Acme".
+_HOLDER = re.compile(r"(?i:copyright|\(c\)|\u00a9)[ \t]*(?:\(c\)|\u00a9)?[ \t]*(?:[\d,\- ]+)?(?:(?i:by)[ \t]+)?([A-Z][\w.\-]*)")
 _VERSIONED_NAME = re.compile(r"^[A-Za-z][\w\-]*?[-.]v?\d+\.\d+\.\d+(?:[-.+][\w]+)*\.(?:js|mjs|cjs|css)$")
 
 
@@ -91,10 +96,17 @@ def vendored(path, head):
     opening = "\n".join(lines)
     if not _LIB_LICENSE.search(opening):
         return None
+    holders = {h.group(1) for h in _HOLDER.finditer(opening)}
     for found in _LIB_VERSION.finditer(opening):
+        words = found.group(0).split()
         # "Apache License, Version 2.0" names a license, not a library.
-        if found.group(0).split()[0].rstrip(":") not in _NOT_A_LIBRARY:
-            return f"vendored: {found.group(0).strip()}"
+        if words[0].rstrip(":") in _NOT_A_LIBRARY or _LICENSE_WORD.search(found.group(0)):
+            continue
+        # "Acme Billing Engine 4.2.1" under "Copyright (c) 2023 Acme" is the holder's own product. A holder
+        # name alone with a version ("Acme 4.2.1") still counts, since a library is often named for its author.
+        if words[0] in holders and len(words) >= 3:
+            continue
+        return f"vendored: {found.group(0).strip()}"
     return None
 
 

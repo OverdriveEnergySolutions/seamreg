@@ -307,3 +307,25 @@ def test_the_inventory_skips_a_library_and_says_why(tmp_path):
     inv = Inventory(tmp_path)
     assert inv.read == ["static/app.js"]
     assert inv.skipped == {"static/jquery-4.0.0.slim.js": "vendored: version in the file name"}
+
+
+@pytest.mark.parametrize("name", ["Eclipse Public License v2.0", "Mozilla Public License Version 2.0",
+                                  "Boost Software License 1.0", "Creative Commons Attribution 4.0"])
+def test_a_license_name_with_a_version_is_not_a_library(name):
+    from seams.scan.inventory import vendored
+    assert vendored("src/Main.java", f"/*\n * This program is made available under the {name}\n * Copyright 2024\n */\n") is None
+    assert vendored("src/Main.java", f"// {name}\n// Licensed to the project\n") is None
+
+
+def test_the_holders_own_product_is_not_a_library():
+    from seams.scan.inventory import vendored
+    own = "// Copyright (c) 2023 Acme\n// Acme Billing Engine 4.2.1\n"
+    assert vendored("src/billing.js", own) is None
+
+
+def test_real_library_headers_are_still_skipped():
+    from seams.scan.inventory import vendored
+    jq = "/*!\n * jQuery JavaScript Library v3.7.1\n * Copyright OpenJS Foundation and other contributors\n * Released under the MIT license\n */\n"
+    jd = "/**\n * Jdenticon 3.2.0\n * Copyright 2014-2024 Daniel Mester Pirttijarvi\n * Released under the MIT license\n */\n"
+    assert vendored("a/jquery.js", jq) == "vendored: JavaScript Library v3.7.1"
+    assert vendored("a/jdenticon.js", jd) == "vendored: Jdenticon 3.2.0"
